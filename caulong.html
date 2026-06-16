@@ -204,6 +204,8 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
   .stat-value{font-size:20px}
   .nav-tab{padding:5px 10px;font-size:12px}
   .member-cost-grid{grid-template-columns:1fr 1fr}
+  .header-inner{flex-wrap:wrap;height:auto;padding:8px 0;gap:6px}
+  .header-inner .btn-sm{font-size:11px;padding:4px 8px}
 }
 
 /* SESSION DETAIL inline */
@@ -227,6 +229,11 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
       <button class="nav-tab" onclick="switchTab('members')">👥 Thành viên</button>
       <button class="nav-tab" onclick="switchTab('export')">📤 Xuất file</button>
     </nav>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="btn btn-ghost btn-sm" onclick="backupData()" title="Sao lưu dữ liệu ra file JSON">💾 Sao lưu</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('restore-input').click()" title="Khôi phục từ file JSON">📂 Khôi phục</button>
+      <input type="file" id="restore-input" accept=".json" style="display:none" onchange="restoreData(this)">
+    </div>
   </div>
 </header>
 
@@ -1180,6 +1187,43 @@ function showToast(msg){
   const el=document.getElementById('toast');
   el.textContent=msg;el.classList.add('show');
   clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),2400);
+}
+
+// ─── BACKUP / RESTORE ─────────────────────────────────────────────
+function backupData(){
+  const data={members,sessions,exported:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  const d=new Date();
+  const fname='caulong-backup-'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.json';
+  a.href=URL.createObjectURL(blob);
+  a.download=fname;
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);document.body.removeChild(a)},500);
+  showToast('💾 Đã sao lưu: '+fname);
+}
+
+function restoreData(input){
+  const file=input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const data=JSON.parse(e.target.result);
+      if(!data.members||!data.sessions)throw new Error('File không hợp lệ');
+      if(!confirm('Khôi phục dữ liệu từ file "'+file.name+'"?\nDữ liệu hiện tại sẽ bị ghi đè.'))return;
+      members=data.members;
+      sessions=data.sessions;
+      ss('hl_members',members);
+      ss('hl_sessions',sessions);
+      renderSessions();
+      showToast('✅ Đã khôi phục '+sessions.length+' buổi, '+members.length+' thành viên');
+    }catch(err){
+      alert('Lỗi đọc file: '+err.message);
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
