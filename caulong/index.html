@@ -191,7 +191,13 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
 .share-all{border-color:var(--text);color:var(--text);font-weight:600}
 .share-all.on{background:var(--text);border-color:var(--text);color:#fff}
 
-/* PRINT / EXPORT RECEIPT */
+/* TOGGLE SWITCH */
+.toggle-track{position:absolute;inset:0;border-radius:24px;background:var(--border-s);transition:background .2s;cursor:pointer}
+.toggle-track::before{content:'';position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;left:3px;top:3px;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+#ex-hide-paid:checked~.toggle-track,
+#ex-hide-paid:checked+.toggle-track{background:var(--green)}
+#ex-hide-paid:checked~.toggle-track::before,
+#ex-hide-paid:checked+.toggle-track::before{transform:translateX(18px)}
 @media print{
   body{background:#fff}
   .no-print{display:none!important}
@@ -291,21 +297,37 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
 </div>
 
 <!-- ══════════════ TAB: XUẤT FILE ══════════════ -->
-<div class="page" id="tab-export">
-  <div class="card" style="margin-bottom:88px">
-    <div class="card-hd">
-      <div class="card-hd-l"><div class="card-ico">📤</div><div><div class="card-title">Export Personal Statement</div><div class="card-sub">Select members and date range</div></div></div>
-    </div>
-    <div class="card-bd">
-      <div class="field-group">
-        <label class="field-label">From Date</label>
-        <input type="date" id="ex-from">
+<div class="page" id="tab-export" style="padding:0">
+  <!-- Sticky top panel: date + member header + search -->
+  <div id="export-sticky" style="display:none;position:sticky;top:56px;z-index:90;background:var(--bg);padding:1.25rem 1.25rem 0">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-hd">
+        <div class="card-hd-l"><div class="card-ico">📤</div><div><div class="card-title">Export Personal Statement</div><div class="card-sub">Select members and date range</div></div></div>
       </div>
-      <div class="field-group">
-        <label class="field-label">To Date</label>
-        <input type="date" id="ex-to">
-      </div>
-      <div class="field-group">
+      <div class="card-bd" style="padding-bottom:0">
+        <!-- Date range -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <label class="field-label">From Date</label>
+            <input type="date" id="ex-from">
+          </div>
+          <div>
+            <label class="field-label">To Date</label>
+            <input type="date" id="ex-to">
+          </div>
+        </div>
+        <!-- Hide paid toggle -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:10px">
+          <div>
+            <div style="font-size:13px;font-weight:500">Hide Paid sessions</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px">Only show unpaid sessions in export</div>
+          </div>
+          <label for="ex-hide-paid" style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0;cursor:pointer">
+            <input type="checkbox" id="ex-hide-paid" style="position:absolute;opacity:0;width:0;height:0">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <!-- Member list header + search -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <label class="field-label" style="margin-bottom:0">Select Members</label>
           <div style="display:flex;gap:6px">
@@ -313,12 +335,19 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
             <button class="btn btn-ghost btn-xs" onclick="selectAllExport(false)">Deselect All</button>
           </div>
         </div>
-        <div style="position:relative;margin-bottom:8px">
+        <div style="position:relative;margin-bottom:10px">
           <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:var(--hint)">🔍</span>
           <input type="text" id="ex-search" placeholder="Search members…" autocomplete="off"
             oninput="filterExportMembers(this.value)"
             style="padding-left:30px;background:var(--bg)">
         </div>
+      </div>
+    </div>
+  </div>
+  <!-- Scrollable member list -->
+  <div style="padding:0 1.25rem 100px">
+    <div class="card" style="margin-top:8px;margin-bottom:0;border-top-left-radius:0;border-top-right-radius:0;border-top:none">
+      <div class="card-bd" style="padding-top:10px">
         <div id="export-member-list"></div>
         <div id="ex-no-result" style="display:none;text-align:center;font-size:12px;color:var(--hint);padding:10px 0">No members found.</div>
       </div>
@@ -433,7 +462,10 @@ function switchTab(t){
   const idx={'sessions':0,'members':1,'export':2}[t];
   document.querySelectorAll('.nav-tab')[idx].classList.add('active');
   const bar=document.getElementById('export-fixed-bar');
-  if(bar)bar.style.display=(t==='export')?'block':'none';
+  const sticky=document.getElementById('export-sticky');
+  const isExport=(t==='export');
+  if(bar)bar.style.display=isExport?'block':'none';
+  if(sticky)sticky.style.display=isExport?'block':'none';
   if(t==='sessions')renderSessions();
   if(t==='members')renderMembers();
   if(t==='export')renderExportPage();
@@ -1064,22 +1096,23 @@ function doExport(){
   if(filteredSessions.length===0){showToast('No sessions found in this date range');return;}
 
   // Generate one file per selected member
+  const hidePaid=document.getElementById('ex-hide-paid')?.checked||false;
   selectedIds.forEach(mid=>{
     const m=members.find(x=>x.id===mid);
     if(!m)return;
-    const html=generateReceipt(m,filteredSessions,from,to);
+    const html=generateReceipt(m,filteredSessions,from,to,hidePaid);
     downloadFile(html,'caulong-'+m.name.replace(/\s+/g,'-')+'-'+from+'-'+to+'.html');
   });
   showToast('Exported '+selectedIds.length+' file(s)');
 }
 
-function generateReceipt(member,filteredSessions,from,to){
+function generateReceipt(member,filteredSessions,from,to,hidePaid=false){
   const relevantSessions=filteredSessions
     .filter(s=>s.members.some(m=>m.id===member.id)&&calcMemberAmount(s,member.id)>0)
-    .sort((a,b)=>a.date.localeCompare(b.date));
+    .sort((a,b)=>b.date.localeCompare(a.date));
 
   let totalDebt=0,totalPaid=0;
-  const rows=relevantSessions.map(s=>{
+  let rows=relevantSessions.map(s=>{
     const sm=s.members.find(m=>m.id===member.id);
     const amt=calcMemberAmount(s,member.id);
     if(sm.paid)totalPaid+=amt; else totalDebt+=amt;
@@ -1089,6 +1122,7 @@ function generateReceipt(member,filteredSessions,from,to){
     }).join(', ');
     return {date:s.date,note:s.note,amt,paid:sm.paid,costDetail};
   });
+  if(hidePaid)rows=rows.filter(r=>!r.paid);
 
   // Group rows by month
   const monthGroups={};
@@ -1097,7 +1131,7 @@ function generateReceipt(member,filteredSessions,from,to){
     if(!monthGroups[key])monthGroups[key]=[];
     monthGroups[key].push(r);
   });
-  const monthKeys=Object.keys(monthGroups).sort();
+  const monthKeys=Object.keys(monthGroups).sort((a,b)=>b.localeCompare(a));
 
   const fmtVN=n=>Math.round(n).toLocaleString('en-US');
   const fmtD=iso=>{const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('en-GB',{day:'numeric',month:'numeric',year:'numeric'});};
@@ -1292,21 +1326,22 @@ async function doExportImage(){
 
   showToast('⏳ Generating image(s)…');
 
+  const hidePaid=document.getElementById('ex-hide-paid')?.checked||false;
   for(const mid of selectedIds){
     const m=members.find(x=>x.id===mid);
     if(!m)continue;
-    await exportMemberImage(m,filteredSessions,from,to);
+    await exportMemberImage(m,filteredSessions,from,to,hidePaid);
   }
   showToast('🖼️ Exported '+selectedIds.length+' image(s)');
 }
 
-async function exportMemberImage(member,filteredSessions,from,to){
+async function exportMemberImage(member,filteredSessions,from,to,hidePaid=false){
   const relevantSessions=filteredSessions
     .filter(s=>s.members.some(m=>m.id===member.id)&&calcMemberAmount(s,member.id)>0)
-    .sort((a,b)=>a.date.localeCompare(b.date));
+    .sort((a,b)=>b.date.localeCompare(a.date));
 
   let totalDebt=0,totalPaid=0;
-  const rows=relevantSessions.map(s=>{
+  let rows=relevantSessions.map(s=>{
     const sm=s.members.find(m=>m.id===member.id);
     const amt=calcMemberAmount(s,member.id);
     if(sm.paid)totalPaid+=amt; else totalDebt+=amt;
@@ -1316,6 +1351,7 @@ async function exportMemberImage(member,filteredSessions,from,to){
     }).join(', ');
     return{date:s.date,note:s.note,amt,paid:sm.paid,costDetail};
   });
+  if(hidePaid)rows=rows.filter(r=>!r.paid);
 
   const fmtVN=n=>Math.round(n).toLocaleString('en-US');
   const fmtD=iso=>{const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('en-GB',{day:'numeric',month:'numeric',year:'numeric'});};
@@ -1328,7 +1364,7 @@ async function exportMemberImage(member,filteredSessions,from,to){
     if(!monthGroups[key])monthGroups[key]=[];
     monthGroups[key].push(r);
   });
-  const monthKeys=Object.keys(monthGroups).sort();
+  const monthKeys=Object.keys(monthGroups).sort((a,b)=>b.localeCompare(a));
 
   let tableHtml='';
   if(rows.length===0){
