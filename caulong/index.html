@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Badminton Club</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
 :root {
   --green:#1D9E75; --green-l:#E1F5EE; --green-d:#085041; --green-m:#9FE1CB;
@@ -322,6 +323,9 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
         <div id="ex-no-result" style="display:none;text-align:center;font-size:12px;color:var(--hint);padding:10px 0">No members found.</div>
       </div>
       <button class="btn btn-primary" onclick="doExport()" style="width:100%;justify-content:center;margin-top:4px">📄 Export HTML</button>
+      <button class="btn btn-green" onclick="doExportImage()" style="width:100%;justify-content:center;margin-top:8px">🖼️ Export Image (PNG)</button>
+      <!-- Hidden render area for image export -->
+      <div id="img-export-area" style="position:fixed;left:-9999px;top:0;width:680px;background:#F7F7F5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;z-index:-1;padding:0"></div>
     </div>
   </div>
 </div>
@@ -1267,7 +1271,182 @@ function restoreData(input){
   reader.readAsText(file);
 }
 
+// ─── EXPORT IMAGE ─────────────────────────────────────────────────
+async function doExportImage(){
+  const from=document.getElementById('ex-from').value;
+  const to=document.getElementById('ex-to').value;
+  if(!from||!to){showToast('Please select a date range');return;}
+  const selectedIds=members.filter(m=>document.getElementById('exp-card-'+m.id)?.classList.contains('selected')).map(m=>m.id);
+  if(selectedIds.length===0){showToast('Select at least 1 member');return;}
+
+  const filteredSessions=sessions.filter(s=>s.date>=from&&s.date<=to);
+  if(filteredSessions.length===0){showToast('No sessions found in this date range');return;}
+
+  showToast('⏳ Generating image(s)…');
+
+  for(const mid of selectedIds){
+    const m=members.find(x=>x.id===mid);
+    if(!m)continue;
+    await exportMemberImage(m,filteredSessions,from,to);
+  }
+  showToast('🖼️ Exported '+selectedIds.length+' image(s)');
+}
+
+async function exportMemberImage(member,filteredSessions,from,to){
+  const relevantSessions=filteredSessions
+    .filter(s=>s.members.some(m=>m.id===member.id)&&calcMemberAmount(s,member.id)>0)
+    .sort((a,b)=>a.date.localeCompare(b.date));
+
+  let totalDebt=0,totalPaid=0;
+  const rows=relevantSessions.map(s=>{
+    const sm=s.members.find(m=>m.id===member.id);
+    const amt=calcMemberAmount(s,member.id);
+    if(sm.paid)totalPaid+=amt; else totalDebt+=amt;
+    const costDetail=s.costs.filter(c=>c.memberIds.includes(member.id)).map(c=>{
+      const per=c.memberIds.length>0?c.amount/c.memberIds.length:0;
+      return c.name+' ('+Math.round(per).toLocaleString('en-US')+'đ)';
+    }).join(', ');
+    return{date:s.date,note:s.note,amt,paid:sm.paid,costDetail};
+  });
+
+  const fmtVN=n=>Math.round(n).toLocaleString('en-US');
+  const fmtD=iso=>{const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('en-GB',{day:'numeric',month:'numeric',year:'numeric'});};
+  const fmtM=key=>{const[yr,mo]=key.split('-');return'Month '+parseInt(mo)+' / '+yr;};
+
+  // Group by month
+  const monthGroups={};
+  rows.forEach(r=>{
+    const key=r.date.slice(0,7);
+    if(!monthGroups[key])monthGroups[key]=[];
+    monthGroups[key].push(r);
+  });
+  const monthKeys=Object.keys(monthGroups).sort();
+
+  let tableHtml='';
+  if(rows.length===0){
+    tableHtml='<div style="text-align:center;color:#A09F9A;padding:2rem;font-size:14px">No data in this time range.</div>';
+  } else {
+    monthKeys.forEach(key=>{
+      const mRows=monthGroups[key];
+      const mTotal=mRows.reduce((s,r)=>s+r.amt,0);
+      const mPaid=mRows.filter(r=>r.paid).reduce((s,r)=>s+r.amt,0);
+      const mDebt=mTotal-mPaid;
+      tableHtml+=`<div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding:10px 14px;background:#fff;border:1px solid #E5E4DF;border-radius:10px 10px 0 0;border-bottom:2px solid #1C1C1A">
+          <span style="font-size:14px;font-weight:700">${fmtM(key)}</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span style="font-size:11px;border-radius:20px;padding:2px 9px;font-weight:500;background:#E1F5EE;color:#085041">Paid: ${fmtVN(mPaid)}đ</span>
+            ${mDebt>0?`<span style="font-size:11px;border-radius:20px;padding:2px 9px;font-weight:500;background:#FAECE7;color:#712B13">Outstanding: ${fmtVN(mDebt)}đ</span>`:''}
+            ${mDebt===0?`<span style="font-size:11px;border-radius:20px;padding:2px 9px;font-weight:500;background:#1D9E75;color:#fff">✓ Fully Paid</span>`:''}
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #E5E4DF;border-top:none;border-radius:0 0 10px 10px;overflow:hidden">
+          <thead><tr>
+            <th style="background:#F7F7F5;font-size:10px;color:#6B6A65;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;text-align:left;border-bottom:1px solid #E5E4DF">Date</th>
+            <th style="background:#F7F7F5;font-size:10px;color:#6B6A65;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;text-align:left;border-bottom:1px solid #E5E4DF">Note / Cost</th>
+            <th style="background:#F7F7F5;font-size:10px;color:#6B6A65;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;text-align:right;border-bottom:1px solid #E5E4DF">Amount</th>
+            <th style="background:#F7F7F5;font-size:10px;color:#6B6A65;text-transform:uppercase;letter-spacing:.05em;padding:8px 12px;text-align:center;border-bottom:1px solid #E5E4DF">Status</th>
+          </tr></thead>
+          <tbody>
+          ${mRows.map(r=>`<tr>
+            <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9;white-space:nowrap;color:#6B6A65;font-size:12px">${fmtD(r.date)}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9"><div style="font-weight:500;font-size:13px">${r.note?esc(r.note):fmtD(r.date)}</div><div style="font-size:11px;color:#6B6A65;margin-top:2px">${esc(r.costDetail)||'No cost detail'}</div></td>
+            <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9;text-align:right;font-weight:600;font-size:13px">${fmtVN(r.amt)}đ</td>
+            <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9;text-align:center"><span style="font-size:11px;border-radius:20px;padding:2px 9px;font-weight:500;background:${r.paid?'#E1F5EE':'#FAECE7'};color:${r.paid?'#085041':'#712B13'}">${r.paid?'✓ Paid':'⏳ Unpaid'}</span></td>
+          </tr>`).join('')}
+          </tbody>
+          <tfoot><tr>
+            <td colspan="2" style="padding:9px 12px;background:#F7F7F5;border-top:1px solid #E5E4DF;font-weight:600;text-align:right;font-size:12px;color:#6B6A65">Monthly Total</td>
+            <td style="padding:9px 12px;background:#F7F7F5;border-top:1px solid #E5E4DF;text-align:right;font-weight:700;font-size:14px">${fmtVN(mTotal)}đ</td>
+            <td style="padding:9px 12px;background:#F7F7F5;border-top:1px solid #E5E4DF"></td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+    });
+    tableHtml+=`<div style="display:flex;justify-content:space-between;align-items:center;background:#1C1C1A;color:#fff;border-radius:10px;padding:14px 16px;font-size:15px;font-weight:700;margin-top:4px">
+      <span>Grand Total (${rows.length} sessions)</span>
+      <span>${fmtVN(totalDebt+totalPaid)}đ</span>
+    </div>`;
+  }
+
+  const fromD=fmtD(from);
+  const toD=fmtD(to);
+  const initials2=member.name.trim().split(/\s+/).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+  const html=`
+    <div style="padding:24px;background:#F7F7F5;min-width:680px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1C1C1A">
+      <div style="background:#1C1C1A;color:#fff;border-radius:12px;padding:20px 24px;margin-bottom:16px">
+        <div style="font-size:12px;opacity:.6;margin-bottom:6px">🏸 Badminton Club — Personal Statement</div>
+        <div style="display:flex;align-items:center;gap:14px">
+          <div style="width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;flex-shrink:0">${initials2}</div>
+          <div>
+            <div style="font-size:22px;font-weight:700;letter-spacing:-.02em">${esc(member.name)}</div>
+            <div style="font-size:12px;opacity:.6;margin-top:2px">${fromD} → ${toD}</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+        <div style="background:#fff;border:1px solid #E5E4DF;border-radius:10px;padding:12px 14px">
+          <div style="font-size:10px;color:#6B6A65;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Sessions</div>
+          <div style="font-size:22px;font-weight:700">${rows.length}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #E5E4DF;border-radius:10px;padding:12px 14px">
+          <div style="font-size:10px;color:#6B6A65;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Paid</div>
+          <div style="font-size:22px;font-weight:700;color:#1D9E75">${fmtVN(totalPaid)}đ</div>
+        </div>
+        <div style="background:#fff;border:1px solid #E5E4DF;border-radius:10px;padding:12px 14px">
+          <div style="font-size:10px;color:#6B6A65;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Outstanding</div>
+          <div style="font-size:22px;font-weight:700;color:#D85A30">${fmtVN(totalDebt)}đ</div>
+        </div>
+      </div>
+      ${tableHtml}
+      <div style="text-align:center;font-size:11px;color:#A09F9A;margin-top:16px">Exported ${new Date().toLocaleDateString('en-GB')} · Badminton Club</div>
+    </div>`;
+
+  // Render into hidden area, capture with html2canvas
+  const area=document.getElementById('img-export-area');
+  area.innerHTML=html;
+  area.style.left='-9999px';
+  area.style.width='720px';
+
+  await new Promise(r=>setTimeout(r,100)); // let DOM paint
+
+  const canvas=await html2canvas(area,{
+    scale:2,
+    useCORS:true,
+    backgroundColor:'#F7F7F5',
+    logging:false,
+    width:720,
+    windowWidth:720
+  });
+
+  area.innerHTML='';
+
+  const link=document.createElement('a');
+  link.download='caulong-'+member.name.replace(/\s+/g,'-')+'-'+from+'-'+to+'.png';
+  link.href=canvas.toDataURL('image/png');
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(()=>document.body.removeChild(link),500);
+}
+
 // ─── INIT ─────────────────────────────────────────────────────────
+// Fix: đổi trạng thái Paid → Unpaid cho thành viên tên Trung
+(function fixTrungStatus(){
+  let changed=false;
+  sessions.forEach(s=>{
+    s.members.forEach(m=>{
+      if(m.name&&m.name.trim().toLowerCase()==='trung'&&m.paid===true){
+        m.paid=false;
+        changed=true;
+      }
+    });
+  });
+  if(changed){
+    ss('hl_sessions',sessions);
+  }
+})();
+
 // On load: auto-add all members to default cost memberIds in modal
 renderSessions();
 
