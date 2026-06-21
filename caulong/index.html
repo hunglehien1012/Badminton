@@ -1337,7 +1337,7 @@ async function exportMemberImage(member,filteredSessions,from,to){
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <span style="display:inline-block;white-space:nowrap;font-size:11px;border-radius:20px;padding:3px 10px;font-weight:600;line-height:1.4;background:#E1F5EE;color:#085041">Paid: ${fmtVN(mPaid)}đ</span>
             ${mDebt>0?`<span style="display:inline-block;white-space:nowrap;font-size:11px;border-radius:20px;padding:3px 10px;font-weight:600;line-height:1.4;background:#FAECE7;color:#712B13">Outstanding: ${fmtVN(mDebt)}đ</span>`:''}
-            ${mDebt===0?`<span style="display:inline-block;white-space:nowrap;font-size:11px;border-radius:20px;padding:3px 10px;font-weight:600;line-height:1.4;background:#1D9E75;color:#fff">v Fully Paid</span>`:''}
+            ${mDebt===0?`<span style="display:inline-block;white-space:nowrap;font-size:11px;border-radius:20px;padding:3px 10px;font-weight:600;line-height:1.4;background:#1D9E75;color:#fff">Fully Paid</span>`:''}
           </div>
         </div>
         <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #E5E4DF;border-top:none;border-radius:0 0 10px 10px;overflow:hidden">
@@ -1352,7 +1352,7 @@ async function exportMemberImage(member,filteredSessions,from,to){
             <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9;white-space:nowrap;color:#6B6A65;font-size:12px">${fmtD(r.date)}</td>
             <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9"><div style="font-weight:500;font-size:13px">${r.note?esc(r.note):fmtD(r.date)}</div><div style="font-size:11px;color:#6B6A65;margin-top:2px">${esc(r.costDetail)||'No cost detail'}</div></td>
             <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9;text-align:right;font-weight:600;font-size:13px">${fmtVN(r.amt)}đ</td>
-            <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9;text-align:center;white-space:nowrap"><span style="display:inline-block;white-space:nowrap;font-size:11px;border-radius:20px;padding:3px 10px;font-weight:600;line-height:1.4;background:${r.paid?'#E1F5EE':'#FAECE7'};color:${r.paid?'#085041':'#712B13'}">${r.paid?'v Paid':'Unpaid'}</span></td>
+            <td style="padding:9px 12px;border-bottom:1px solid #F0EFE9;text-align:center;white-space:nowrap"><span style="display:inline-block;white-space:nowrap;font-size:11px;border-radius:20px;padding:3px 10px;font-weight:600;line-height:1.4;background:${r.paid?'#E1F5EE':'#FAECE7'};color:${r.paid?'#085041':'#712B13'}">${r.paid?'Paid':'Unpaid'}</span></td>
           </tr>`).join('')}
           </tbody>
           <tfoot><tr>
@@ -1437,22 +1437,6 @@ async function exportMemberImage(member,filteredSessions,from,to){
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
-// Fix: đổi trạng thái Paid → Unpaid cho thành viên tên Trung
-(function fixTrungStatus(){
-  let changed=false;
-  sessions.forEach(s=>{
-    s.members.forEach(m=>{
-      if(m.name&&m.name.trim().toLowerCase()==='trung'&&m.paid===true){
-        m.paid=false;
-        changed=true;
-      }
-    });
-  });
-  if(changed){
-    ss('hl_sessions',sessions);
-  }
-})();
-
 // On load: auto-add all members to default cost memberIds in modal
 renderSessions();
 
