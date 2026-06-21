@@ -1437,6 +1437,19 @@ async function exportMemberImage(member,filteredSessions,from,to){
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
+// Migration: đổi note có dạng ngày/tháng/năm → "Saturday"
+(function migrateNoteDates(){
+  const datePattern=/^\d{1,2}\/\d{1,2}\/\d{4}$/;
+  let changed=false;
+  sessions.forEach(s=>{
+    if(s.note&&datePattern.test(s.note.trim())){
+      s.note='Saturday';
+      changed=true;
+    }
+  });
+  if(changed)ss('hl_sessions',sessions);
+})();
+
 // On load: auto-add all members to default cost memberIds in modal
 renderSessions();
 
