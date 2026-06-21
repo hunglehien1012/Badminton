@@ -1437,12 +1437,12 @@ async function exportMemberImage(member,filteredSessions,from,to){
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
-// Migration: đổi note có dạng ngày/tháng/năm → "Saturday"
+// Migration: điền "Saturday" vào các note đang trống
 (function migrateNoteDates(){
   const datePattern=/^\d{1,2}\/\d{1,2}\/\d{4}$/;
   let changed=false;
   sessions.forEach(s=>{
-    if(s.note&&datePattern.test(s.note.trim())){
+    if(!s.note||s.note.trim()===''||datePattern.test(s.note.trim())){
       s.note='Saturday';
       changed=true;
     }
