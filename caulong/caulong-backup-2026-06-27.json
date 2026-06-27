@@ -1,0 +1,1326 @@
+{
+  "members": [
+    {
+      "id": "mqgt1eqylrhl",
+      "name": "Hùng"
+    },
+    {
+      "id": "mqgt1pa8norp",
+      "name": "Vĩ"
+    },
+    {
+      "id": "mqgt1uzp12kl",
+      "name": "Chí Huy"
+    },
+    {
+      "id": "mqgt1xpxvxl8",
+      "name": "Hào"
+    },
+    {
+      "id": "mqgt23voy7z8",
+      "name": "Trung"
+    },
+    {
+      "id": "mqgt2ltw3nla",
+      "name": "Thạnh"
+    },
+    {
+      "id": "mqgt2o5pr60e",
+      "name": "Dương",
+      "type": "fixed"
+    },
+    {
+      "id": "mqgtx4pm9bdu",
+      "name": "Bích",
+      "type": "casual"
+    },
+    {
+      "id": "mqgtxnf8apsc",
+      "name": "Thịnh",
+      "type": "casual"
+    },
+    {
+      "id": "mqgtxsd3z9d8",
+      "name": "Bạn Thịnh 1",
+      "type": "casual"
+    },
+    {
+      "id": "mqgur297egoo",
+      "name": "Trí",
+      "type": "casual"
+    },
+    {
+      "id": "mqgur9nk1wgq",
+      "name": "Ly",
+      "type": "casual"
+    },
+    {
+      "id": "mqgurc58abyv",
+      "name": "Nhật",
+      "type": "casual"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "mqgt4y12s3ul",
+      "date": "2026-06-13",
+      "note": "Saturday",
+      "costs": [
+        {
+          "id": "mqgt0lc4gw2m",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 200000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqgt0lc4ue0u",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 20000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqgt0lc4fb7y",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 81000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqgt2sgfswpo",
+          "name": "Hủ tíu 40/ phần",
+          "emoji": "🗒️",
+          "amount": 80000,
+          "memberIds": [
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl"
+          ]
+        },
+        {
+          "id": "mqgt4ppkv82a",
+          "name": "Hủ tíu 38",
+          "emoji": "🗒️",
+          "amount": 38000,
+          "memberIds": [
+            "mqgt1xpxvxl8"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": true
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": true
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": true
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": true
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": true
+        }
+      ]
+    },
+    {
+      "id": "mqgtimbm0fmd",
+      "date": "2026-05-02",
+      "note": "Saturday",
+      "costs": [
+        {
+          "id": "mqgtg5qkeq6j",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 200000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1uzp12kl",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqgtg5qkox7p",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 20000,
+          "memberIds": [
+            "mqgt1uzp12kl",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e",
+            "mqgt1eqylrhl"
+          ]
+        },
+        {
+          "id": "mqgtg5qkgmog",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 108000,
+          "memberIds": [
+            "mqgt1uzp12kl",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e",
+            "mqgt1eqylrhl"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": true
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": false
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": true
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": true
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": true
+        }
+      ]
+    },
+    {
+      "id": "mqgtn1dsqojb",
+      "date": "2026-05-09",
+      "note": "Saturday",
+      "costs": [
+        {
+          "id": "mqgtkfh3aci5",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 200000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqgtkfh3vjbz",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 20000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqgtkfh3gvt2",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 114000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": true
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": true
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": true
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": true
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": true
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": true
+        }
+      ]
+    },
+    {
+      "id": "mqgtpe2lxr6f",
+      "date": "2026-05-16",
+      "note": "Saturday",
+      "costs": [
+        {
+          "id": "mqgtnpigk8st",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 200000,
+          "memberIds": [
+            "mqgt1xpxvxl8",
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1uzp12kl"
+          ]
+        },
+        {
+          "id": "mqgtnpigtb6a",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 20000,
+          "memberIds": [
+            "mqgt1xpxvxl8",
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1uzp12kl"
+          ]
+        },
+        {
+          "id": "mqgtnpigy50h",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 90000,
+          "memberIds": [
+            "mqgt1xpxvxl8",
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1uzp12kl"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": false
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": true
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": true
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": true
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": false
+        }
+      ]
+    },
+    {
+      "id": "mqgtrbin9663",
+      "date": "2026-05-23",
+      "note": "Saturday",
+      "costs": [
+        {
+          "id": "mqgtq53aqhao",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 200000,
+          "memberIds": [
+            "mqgt1xpxvxl8",
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1uzp12kl",
+            "mqgt1pa8norp"
+          ]
+        },
+        {
+          "id": "mqgtq53ayc6e",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 20000,
+          "memberIds": [
+            "mqgt1xpxvxl8",
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl"
+          ]
+        },
+        {
+          "id": "mqgtq53a6t6f",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 90000,
+          "memberIds": [
+            "mqgt1xpxvxl8",
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1uzp12kl",
+            "mqgt1pa8norp"
+          ]
+        },
+        {
+          "id": "mqgtsll0qyer",
+          "name": "Há cảo",
+          "emoji": "🗒️",
+          "amount": 24000,
+          "memberIds": [
+            "mqgt23voy7z8"
+          ]
+        },
+        {
+          "id": "mqgtsz8td3nw",
+          "name": "Hủ tíu",
+          "emoji": "🗒️",
+          "amount": 80000,
+          "memberIds": [
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": false
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": true
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": true
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": true
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": true
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": false
+        }
+      ]
+    },
+    {
+      "id": "mqgtv5c1njp8",
+      "date": "2026-05-30",
+      "note": "Saturday",
+      "costs": [
+        {
+          "id": "mqgttybba9gb",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 200000,
+          "memberIds": [
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1uzp12kl",
+            "mqgt1pa8norp",
+            "mqgt1eqylrhl"
+          ]
+        },
+        {
+          "id": "mqgttybbcfwf",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 20000,
+          "memberIds": [
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1uzp12kl",
+            "mqgt1pa8norp",
+            "mqgt1eqylrhl"
+          ]
+        },
+        {
+          "id": "mqgttybbomf1",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 54000,
+          "memberIds": [
+            "mqgt2ltw3nla",
+            "mqgt23voy7z8",
+            "mqgt1uzp12kl",
+            "mqgt1pa8norp",
+            "mqgt1eqylrhl"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": true
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": true
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": false
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": true
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": true
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": false
+        }
+      ]
+    },
+    {
+      "id": "mqgtw491tm87",
+      "date": "2026-05-31",
+      "note": "Saturday",
+      "costs": [
+        {
+          "id": "mqgtvaunsbva",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 200000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqgtvaunrt53",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 20000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqgtvauno94x",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 81000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": true
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": true
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": true
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": true
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": true
+        }
+      ]
+    },
+    {
+      "id": "mqgtxgc413eo",
+      "date": "2026-06-06",
+      "note": "Saturday",
+      "costs": [
+        {
+          "id": "mqgtwim5yufj",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 350000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e",
+            "mqgtx4pm9bdu",
+            "mqgtxnf8apsc",
+            "mqgtxsd3z9d8"
+          ]
+        },
+        {
+          "id": "mqgtwim51l4c",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 40000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e",
+            "mqgtx4pm9bdu",
+            "mqgtxnf8apsc",
+            "mqgtxsd3z9d8"
+          ]
+        },
+        {
+          "id": "mqgtwim59b24",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 84000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e",
+            "mqgtx4pm9bdu",
+            "mqgtxnf8apsc",
+            "mqgtxsd3z9d8"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": true
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": true
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": true
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": true
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": true
+        },
+        {
+          "id": "mqgtx4pm9bdu",
+          "name": "Bích",
+          "paid": true
+        },
+        {
+          "id": "mqgtxnf8apsc",
+          "name": "Thịnh",
+          "paid": true
+        },
+        {
+          "id": "mqgtxsd3z9d8",
+          "name": "Bạn Thịnh 1",
+          "paid": true
+        }
+      ]
+    },
+    {
+      "id": "mqgusx3oftt2",
+      "date": "2026-05-13",
+      "note": "Cầu lông thứ 4",
+      "costs": [
+        {
+          "id": "mqgupm0hnq4y",
+          "name": "Tiền sân",
+          "emoji": "🏟️",
+          "amount": 300000,
+          "memberIds": [
+            "mqgt1uzp12kl",
+            "mqgt1eqylrhl",
+            "mqguqzuzaer2",
+            "mqgur297egoo",
+            "mqgur8b8py8b",
+            "mqgur9nk1wgq",
+            "mqgurc58abyv"
+          ]
+        },
+        {
+          "id": "mqgupm0hztca",
+          "name": "Tiền nước",
+          "emoji": "💧",
+          "amount": 0,
+          "memberIds": [
+            "mqguqzuzaer2",
+            "mqgur297egoo",
+            "mqgur8b8py8b",
+            "mqgur9nk1wgq",
+            "mqgurc58abyv",
+            "mqgt1eqylrhl",
+            "mqgt1uzp12kl"
+          ]
+        },
+        {
+          "id": "mqgupm0h1gsc",
+          "name": "Tiền cầu",
+          "emoji": "🏸",
+          "amount": 55000,
+          "memberIds": [
+            "mqguqzuzaer2",
+            "mqgur297egoo",
+            "mqgur8b8py8b",
+            "mqgur9nk1wgq",
+            "mqgurc58abyv",
+            "mqgt1eqylrhl",
+            "mqgt1uzp12kl"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": true
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": true
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": false
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": false
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": false
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": false
+        },
+        {
+          "id": "mqgtx4pm9bdu",
+          "name": "Bích",
+          "paid": false
+        },
+        {
+          "id": "mqgtxnf8apsc",
+          "name": "Thịnh",
+          "paid": false
+        },
+        {
+          "id": "mqgtxsd3z9d8",
+          "name": "Bạn Thịnh 1",
+          "paid": false
+        },
+        {
+          "id": "mqguqzuzaer2",
+          "name": "Mai",
+          "paid": true
+        },
+        {
+          "id": "mqgur297egoo",
+          "name": "Trí",
+          "paid": true
+        },
+        {
+          "id": "mqgur8b8py8b",
+          "name": "Tú Anh",
+          "paid": true
+        },
+        {
+          "id": "mqgur9nk1wgq",
+          "name": "Ly",
+          "paid": true
+        },
+        {
+          "id": "mqgurc58abyv",
+          "name": "Nhật",
+          "paid": true
+        }
+      ]
+    },
+    {
+      "id": "mqj8ofy2jwac",
+      "date": "2026-06-18",
+      "note": "Cầu lông thứ 4",
+      "costs": [
+        {
+          "id": "mqj8nsrswzvx",
+          "name": "Cầu lông thứ 4",
+          "emoji": "🗒️",
+          "amount": 84000,
+          "memberIds": [
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": false
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": false
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": false
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": false
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": false
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": false
+        },
+        {
+          "id": "mqgtx4pm9bdu",
+          "name": "Bích",
+          "paid": false
+        },
+        {
+          "id": "mqgtxnf8apsc",
+          "name": "Thịnh",
+          "paid": false
+        },
+        {
+          "id": "mqgtxsd3z9d8",
+          "name": "Bạn Thịnh 1",
+          "paid": false
+        },
+        {
+          "id": "mqgur297egoo",
+          "name": "Trí",
+          "paid": false
+        },
+        {
+          "id": "mqgur9nk1wgq",
+          "name": "Ly",
+          "paid": false
+        },
+        {
+          "id": "mqgurc58abyv",
+          "name": "Nhật",
+          "paid": false
+        }
+      ]
+    },
+    {
+      "id": "mqm90iohlvh3",
+      "date": "2026-06-19",
+      "note": "Mê Rau buffet",
+      "costs": [
+        {
+          "id": "mqm8zqj0ljnr",
+          "name": "461 chia 3",
+          "emoji": "🗒️",
+          "amount": 461000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1xpxvxl8",
+            "mqgt2ltw3nla"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": false
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": false
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": false
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": false
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": false
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": false
+        },
+        {
+          "id": "mqgtx4pm9bdu",
+          "name": "Bích",
+          "paid": false
+        },
+        {
+          "id": "mqgtxnf8apsc",
+          "name": "Thịnh",
+          "paid": false
+        },
+        {
+          "id": "mqgtxsd3z9d8",
+          "name": "Bạn Thịnh 1",
+          "paid": false
+        },
+        {
+          "id": "mqgur297egoo",
+          "name": "Trí",
+          "paid": false
+        },
+        {
+          "id": "mqgur9nk1wgq",
+          "name": "Ly",
+          "paid": false
+        },
+        {
+          "id": "mqgurc58abyv",
+          "name": "Nhật",
+          "paid": false
+        }
+      ]
+    },
+    {
+      "id": "mqnjt4022jp8",
+      "date": "2026-06-21",
+      "note": "Sunday",
+      "costs": [
+        {
+          "id": "mqnjqnl6mtk4",
+          "name": "Court Fee",
+          "emoji": "🏟️",
+          "amount": 200000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqnjqnl6kv4o",
+          "name": "Water Fee",
+          "emoji": "💧",
+          "amount": 20000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqnjqnl6fpr7",
+          "name": "Shuttle Fee",
+          "emoji": "🏸",
+          "amount": 81000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla",
+            "mqgt2o5pr60e"
+          ]
+        },
+        {
+          "id": "mqnjrsg0ikpd",
+          "name": "Thêm 30 phút + 1 cầu nhựa(30)",
+          "emoji": "🗒️",
+          "amount": 80000,
+          "memberIds": [
+            "mqgt1eqylrhl",
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8",
+            "mqgt23voy7z8",
+            "mqgt2ltw3nla"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": false
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": false
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": false
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": false
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": false
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": false
+        },
+        {
+          "id": "mqgtx4pm9bdu",
+          "name": "Bích",
+          "paid": false
+        },
+        {
+          "id": "mqgtxnf8apsc",
+          "name": "Thịnh",
+          "paid": false
+        },
+        {
+          "id": "mqgtxsd3z9d8",
+          "name": "Bạn Thịnh 1",
+          "paid": false
+        },
+        {
+          "id": "mqgur297egoo",
+          "name": "Trí",
+          "paid": false
+        },
+        {
+          "id": "mqgur9nk1wgq",
+          "name": "Ly",
+          "paid": false
+        },
+        {
+          "id": "mqgurc58abyv",
+          "name": "Nhật",
+          "paid": false
+        }
+      ]
+    },
+    {
+      "id": "mqszb83ed580",
+      "date": "2026-06-20",
+      "note": "Thứ 7 - Sân Hoàng Hoa Thám",
+      "costs": [
+        {
+          "id": "mqsza8q45oaf",
+          "name": "Giao lưu",
+          "emoji": "🗒️",
+          "amount": 132000,
+          "memberIds": [
+            "mqgt1pa8norp",
+            "mqgt1uzp12kl",
+            "mqgt1xpxvxl8"
+          ]
+        }
+      ],
+      "members": [
+        {
+          "id": "mqgt1eqylrhl",
+          "name": "Hùng",
+          "paid": false
+        },
+        {
+          "id": "mqgt1pa8norp",
+          "name": "Vĩ",
+          "paid": false
+        },
+        {
+          "id": "mqgt1uzp12kl",
+          "name": "Chí Huy",
+          "paid": false
+        },
+        {
+          "id": "mqgt1xpxvxl8",
+          "name": "Hào",
+          "paid": false
+        },
+        {
+          "id": "mqgt23voy7z8",
+          "name": "Trung",
+          "paid": false
+        },
+        {
+          "id": "mqgt2ltw3nla",
+          "name": "Thạnh",
+          "paid": false
+        },
+        {
+          "id": "mqgt2o5pr60e",
+          "name": "Dương",
+          "paid": false
+        },
+        {
+          "id": "mqgtx4pm9bdu",
+          "name": "Bích",
+          "paid": false
+        },
+        {
+          "id": "mqgtxnf8apsc",
+          "name": "Thịnh",
+          "paid": false
+        },
+        {
+          "id": "mqgtxsd3z9d8",
+          "name": "Bạn Thịnh 1",
+          "paid": false
+        },
+        {
+          "id": "mqgur297egoo",
+          "name": "Trí",
+          "paid": false
+        },
+        {
+          "id": "mqgur9nk1wgq",
+          "name": "Ly",
+          "paid": false
+        },
+        {
+          "id": "mqgurc58abyv",
+          "name": "Nhật",
+          "paid": false
+        }
+      ]
+    }
+  ],
+  "exported": "2026-06-27T10:15:49.306Z"
+}
