@@ -561,7 +561,7 @@ function calcMemberAmount(session,memberId){
       if(count>0)total+=c.amount/count;
     }
   });
-  return total;
+  return Math.ceil(total/1000)*1000;
 }
 
 // ─── SESSIONS TAB ─────────────────────────────────────────────────
