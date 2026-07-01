@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Badminton Club</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+<header class="site-header no-print">
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">🏸</div>
+      <div>
+        <div class="logo-text">Badminton Club</div>
+        <div class="logo-sub"></div>
+      </div>
+    </div>
+    <nav class="nav-tabs">
+      <button class="nav-tab active" onclick="switchTab('sessions')">📅 Sessions</button>
+      <button class="nav-tab" onclick="switchTab('members')">👥 Members</button>
+      <button class="nav-tab" onclick="switchTab('export')">📤 Export</button>
+    </nav>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="btn btn-ghost btn-sm" onclick="backupData()" title="Backup data to JSON">💾 Backup</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('restore-input').click()" title="Restore from JSON file">📂 Restore</button>
+      <input type="file" id="restore-input" accept=".json" style="display:none" onchange="restoreData(this)">
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ TAB: BUỔI CHƠI ══════════════ -->
+<div class="page active" id="tab-sessions">
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total Sessions</div>
+      <div class="stat-value" id="s-total-sessions">0</div>
+      <div class="stat-sub">sessions created</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Collected</div>
+      <div class="stat-value green" id="s-collected">0₫</div>
+      <div class="stat-sub">paid</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Outstanding</div>
+      <div class="stat-value coral" id="s-pending">0₫</div>
+      <div class="stat-sub">unpaid</div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
+    <button class="btn btn-primary" onclick="openNewSession()">+ New Session</button>
+  </div>
+
+  <div id="session-list">
+    <div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">No sessions yet.<br>Click "+ New Session" to get started.</div></div>
+  </div>
+</div>
+
+<!-- ══════════════ TAB: THÀNH VIÊN ══════════════ -->
+<div class="page" id="tab-members">
+  <div class="card">
+    <div class="card-hd">
+      <div class="card-hd-l"><div class="card-ico">👤</div><div><div class="card-title">Add Member</div><div class="card-sub">Fixed members are always included in costs</div></div></div>
+    </div>
+    <div class="card-bd">
+      <div class="input-row">
+        <input type="text" id="new-member-name" placeholder="Member name…" maxlength="30" autocomplete="off">
+        <select id="new-member-type" style="width:auto;flex-shrink:0">
+          <option value="fixed">⭐ Fixed</option>
+          <option value="casual">🚶 Casual</option>
+        </select>
+        <button class="btn btn-primary" onclick="addMember()" style="white-space:nowrap">+ Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="member-list-wrap">
+    <div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No members yet.</div></div>
+  </div>
+</div>
+
+<!-- ══════════════ TAB: XUẤT FILE ══════════════ -->
+<div class="page" id="tab-export" style="padding:0">
+  <!-- Sticky top panel: date + member header + search -->
+  <div id="export-sticky" style="display:none;position:sticky;top:56px;z-index:90;background:var(--bg);padding:1.25rem 1.25rem 0">
+    <div class="card" style="margin-bottom:0">
+      <div class="card-hd">
+        <div class="card-hd-l"><div class="card-ico">📤</div><div><div class="card-title">Export Personal Statement</div><div class="card-sub">Select members and date range</div></div></div>
+      </div>
+      <div class="card-bd" style="padding-bottom:0">
+        <!-- Date range -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <label class="field-label">From Date</label>
+            <input type="date" id="ex-from">
+          </div>
+          <div>
+            <label class="field-label">To Date</label>
+            <input type="date" id="ex-to">
+          </div>
+        </div>
+        <!-- Hide paid toggle -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:10px">
+          <div>
+            <div style="font-size:13px;font-weight:500">Hide Paid sessions</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px">Only show unpaid sessions in export</div>
+          </div>
+          <label for="ex-hide-paid" style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0;cursor:pointer">
+            <input type="checkbox" id="ex-hide-paid" style="position:absolute;opacity:0;width:0;height:0">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <!-- Member list header + search -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label class="field-label" style="margin-bottom:0">Select Members</label>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost btn-xs" onclick="selectAllExport(true)">Select All</button>
+            <button class="btn btn-ghost btn-xs" onclick="selectAllExport(false)">Deselect All</button>
+          </div>
+        </div>
+        <div style="position:relative;margin-bottom:10px">
+          <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:var(--hint)">🔍</span>
+          <input type="text" id="ex-search" placeholder="Search members…" autocomplete="off"
+            oninput="filterExportMembers(this.value)"
+            style="padding-left:30px;background:var(--bg)">
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Scrollable member list -->
+  <div style="padding:0 1.25rem 100px">
+    <div class="card" style="margin-top:8px;margin-bottom:0;border-top-left-radius:0;border-top-right-radius:0;border-top:none">
+      <div class="card-bd" style="padding-top:10px">
+        <div id="export-member-list"></div>
+        <div id="ex-no-result" style="display:none;text-align:center;font-size:12px;color:var(--hint);padding:10px 0">No members found.</div>
+      </div>
+    </div>
+  </div>
+  <!-- Fixed export buttons -->
+  <div id="export-fixed-bar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--surface);border-top:1px solid var(--border);padding:10px 1.25rem;box-shadow:0 -2px 12px rgba(0,0,0,0.08)">
+    <div style="max-width:760px;margin:0 auto;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="doExport()" style="flex:1;justify-content:center">📄 Export HTML</button>
+      <button class="btn btn-green" onclick="doExportImage()" style="flex:1;justify-content:center">🖼️ Export Image</button>
+    </div>
+  </div>
+  <!-- Hidden render area for image export -->
+  <div id="img-export-area" style="position:fixed;left:-9999px;top:0;width:680px;background:#F7F7F5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;z-index:-1;padding:0"></div>
+</div>
+</div>
+
+<!-- ══════════════ MODAL: TẠO / SỬA BUỔI ══════════════ -->
+<div class="modal-backdrop" id="modal-session">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title" id="modal-session-title">New Session</span>
+      <button class="btn-icon" onclick="closeModal('modal-session')" style="font-size:20px">×</button>
+    </div>
+    <div class="modal-bd">
+      <div class="field-group">
+        <label class="field-label">Date</label>
+        <input type="date" id="ms-date">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Note (optional)</label>
+        <input type="text" id="ms-note" placeholder="E.g.: Court ABC, this Saturday…" maxlength="60">
+      </div>
+      <hr class="divider">
+      <div class="card-title" style="margin-bottom:10px">💰 Session Costs</div>
+      <div id="cost-lines"></div>
+      <button class="btn btn-ghost btn-sm" onclick="addCostLine()" style="margin-top:4px">+ Add Cost Item</button>
+      <hr class="divider">
+      <div class="card-title" style="margin-bottom:10px">👥 Participants</div>
+      <div id="ms-members"></div>
+      <div class="input-row" style="margin-top:8px">
+        <input type="text" id="ms-new-member-inline" placeholder="Add new name…" maxlength="30">
+        <button class="btn btn-ghost btn-sm" onclick="addInlineMember()" style="white-space:nowrap">+ Add</button>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal('modal-session')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSession()" id="ms-save-btn">Save Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MODAL: CHI TIẾT BUỔI ══════════════ -->
+<div class="modal-backdrop" id="modal-detail">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title" id="md-title">Session Detail</span>
+      <button class="btn-icon" onclick="closeModal('modal-detail')" style="font-size:20px">×</button>
+    </div>
+    <div class="modal-bd" id="md-body"></div>
+    <div class="modal-ft">
+      <button class="btn btn-danger btn-sm" id="md-del-btn"><svg class="icon-trash" viewBox="0 0 24 24"><path d="M9 3a1 1 0 00-1 1v1H4a1 1 0 100 2h1v13a2 2 0 002 2h10a2 2 0 002-2V7h1a1 1 0 100-2h-4V4a1 1 0 00-1-1H9zM8 7h8v13H8V7zm2 2a1 1 0 00-1 1v7a1 1 0 102 0v-7a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v7a1 1 0 102 0v-7a1 1 0 00-1-1z"/></svg> Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-detail')">Close</button>
+      <button class="btn btn-primary btn-sm" id="md-edit-btn">✏️ Edit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MODAL: XÁC NHẬN XÓA ══════════════ -->
+<div class="modal-backdrop" id="modal-confirm">
+  <div class="modal confirm-modal">
+    <div class="confirm-hd">
+      <span class="confirm-icon-diamond"><span>!</span></span>
+      <span class="confirm-title" id="confirm-title">Remove Month</span>
+    </div>
+    <div class="confirm-bd">
+      <p class="confirm-question" id="confirm-question"></p>
+      <div class="confirm-divider"></div>
+      <div id="confirm-fields"></div>
+    </div>
+    <div class="confirm-ft">
+      <button class="btn btn-confirm-yes" id="confirm-yes-btn">Yes!</button>
+      <button class="btn btn-confirm-no" onclick="closeModal('modal-confirm')">No, keep it</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
