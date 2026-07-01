@@ -426,6 +426,7 @@ function ss(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
 // ─── STATE ────────────────────────────────────────────────────────
 let members = ls('hl_members') || [];   // [{id,name}]
 let sessions = ls('hl_sessions') || []; // [{id,date,note,costs:[{id,name,emoji,amount,memberIds[]}],members:[{id,name,paid}]}]
+let monthCollapseState = ls('hl_month_collapse') || {}; // { 'YYYY-MM': true/false } — remembers user's expand/collapse choice
 let editingSessionId = null;
 let tempCosts = [];   // cost lines in modal
 let tempMembers = []; // members in modal [{id,name,included}]
@@ -526,6 +527,7 @@ function renderMembers(){
 
 function memberRow(m){
   const isFixed=m.type!=='casual';
+  const debt=memberDebt(m.id);
   return `<div class="player-item" style="margin-bottom:7px">
     <div class="avatar" style="${isFixed?'background:var(--amber-l);color:var(--amber)':''}">${initials(m.name)}</div>
     <div style="flex:1">
@@ -534,9 +536,40 @@ function memberRow(m){
       </div>
       <div class="pi-detail">${memberStats(m.id)}</div>
     </div>
+    ${debt>0?`<button class="btn btn-green btn-xs" onclick="markMemberPaidAll('${m.id}')" title="Mark Paid in every unpaid session" style="margin-right:4px;white-space:nowrap">✓ Mark All Paid</button>`:''}
     <button class="btn btn-ghost btn-xs" onclick="toggleMemberType('${m.id}')" title="Change type" style="margin-right:4px">Change</button>
     <button class="btn-icon" onclick="deleteMember('${m.id}')" title="Delete">×</button>
   </div>`;
+}
+
+function memberDebt(mid){
+  let total_debt=0;
+  sessions.forEach(s=>{
+    const p=s.members.find(m=>m.id===mid);
+    if(!p||p.paid)return;
+    total_debt+=calcMemberAmount(s,mid);
+  });
+  return total_debt;
+}
+
+function markMemberPaidAll(mid){
+  const m=members.find(x=>x.id===mid);
+  if(!m)return;
+  const debt=memberDebt(mid);
+  if(debt<=0){showToast(m.name+' has no outstanding sessions');return;}
+  if(!confirm('Mark "'+m.name+'" as Paid in every unpaid session (outstanding '+fmt(debt)+')?'))return;
+  let count=0;
+  sessions.forEach(s=>{
+    const sm=s.members.find(x=>x.id===mid);
+    if(sm&&!sm.paid&&calcMemberAmount(s,mid)>0){
+      sm.paid=true;
+      count++;
+    }
+  });
+  ss('hl_sessions',sessions);
+  renderMembers();
+  renderSessions();
+  showToast('✓ '+m.name+' marked paid in '+count+' session'+(count>1?'s':''));
 }
 
 function memberStats(mid){
@@ -618,8 +651,9 @@ function renderSessions(){
     const mPending=mTotal-mPaid;
     const allDone=mPending===0&&mTotal>0;
 
-    // Collapsed by default except current month
-    const collapsed=!isCurrentMonth;
+    // Collapsed by default except current month — but respect the user's own expand/collapse choice if they already set one
+    if(!(key in monthCollapseState)) monthCollapseState[key] = !isCurrentMonth;
+    const collapsed = monthCollapseState[key];
 
     html+=`<div class="month-group" id="mg-${key}">
       <div class="month-header" onclick="toggleMonth('${key}')">
@@ -675,6 +709,8 @@ function toggleMonth(key){
   const chev=document.getElementById('mc-'+key);
   body.classList.toggle('collapsed');
   chev.classList.toggle('open');
+  monthCollapseState[key]=body.classList.contains('collapsed');
+  ss('hl_month_collapse',monthCollapseState);
 }
 
 // ─── NEW / EDIT SESSION MODAL ──────────────────────────────────────
