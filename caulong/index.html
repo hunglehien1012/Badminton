@@ -4,8 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Badminton Club</title>
-<link rel="stylesheet" href="styles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -22,6 +24,7 @@
       <button class="nav-tab active" onclick="switchTab('sessions')">📅 Sessions</button>
       <button class="nav-tab" onclick="switchTab('members')">👥 Members</button>
       <button class="nav-tab" onclick="switchTab('export')">📤 Export</button>
+      <button class="nav-tab" onclick="switchTab('vote')">🗳️ Vote</button>
     </nav>
     <div style="display:flex;gap:6px;flex-shrink:0">
       <button class="btn btn-ghost btn-sm" onclick="backupData()" title="Backup data to JSON">💾 Backup</button>
@@ -152,6 +155,41 @@
 </div>
 </div>
 
+<!-- ══════════════ TAB: VOTE ══════════════ -->
+<div class="page" id="tab-vote">
+  <div id="vote-setup-warn" style="display:none" class="card">
+    <div class="card-bd" style="font-size:13px;line-height:1.6">
+      <div style="font-weight:600;margin-bottom:6px">⚠️ Chưa cấu hình Firebase</div>
+      Để dùng tính năng vote, bạn cần tạo Firebase Realtime Database (miễn phí) và dán cấu hình vào biến <code>FIREBASE_CONFIG</code> ở đầu phần <code>&lt;script&gt;</code> trong file này.<br>
+      Các bước: vào <b>console.firebase.google.com</b> → Add project → Build → <b>Realtime Database</b> → Create database → Rules cho phép đọc/ghi nhánh <code>polls</code> → Project settings → Add web app → copy <code>firebaseConfig</code>.
+    </div>
+  </div>
+  <div class="card" id="vote-create-card">
+    <div class="card-hd">
+      <div class="card-hd-l"><div class="card-ico">🗳️</div><div><div class="card-title" id="vote-create-title">Create Vote</div><div class="card-sub">Share the link so members can vote to join</div></div></div>
+    </div>
+    <div class="card-bd">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <label class="field-label">Date</label>
+          <input type="date" id="vp-date">
+        </div>
+        <div>
+          <label class="field-label">Note (optional)</label>
+          <input type="text" id="vp-note" placeholder="E.g.: Court ABC, 18h-20h…" maxlength="60">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" id="vote-create-btn" onclick="createPoll()">+ Create Vote</button>
+        <button class="btn btn-ghost" id="vote-create-cancel" style="display:none" onclick="cancelEditPoll()">Hủy</button>
+      </div>
+    </div>
+  </div>
+  <div id="poll-list">
+    <div class="empty-state"><div class="empty-icon">🗳️</div><div class="empty-text">No votes yet.</div></div>
+  </div>
+</div>
+
 <!-- ══════════════ MODAL: TẠO / SỬA BUỔI ══════════════ -->
 <div class="modal-backdrop" id="modal-session">
   <div class="modal">
@@ -196,34 +234,29 @@
     </div>
     <div class="modal-bd" id="md-body"></div>
     <div class="modal-ft">
-      <button class="btn btn-danger btn-sm" id="md-del-btn"><svg class="icon-trash" viewBox="0 0 24 24"><path d="M9 3a1 1 0 00-1 1v1H4a1 1 0 100 2h1v13a2 2 0 002 2h10a2 2 0 002-2V7h1a1 1 0 100-2h-4V4a1 1 0 00-1-1H9zM8 7h8v13H8V7zm2 2a1 1 0 00-1 1v7a1 1 0 102 0v-7a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v7a1 1 0 102 0v-7a1 1 0 00-1-1z"/></svg> Delete</button>
+      <button class="btn btn-danger btn-sm" id="md-del-btn">🗑 Delete</button>
       <button class="btn btn-ghost" onclick="closeModal('modal-detail')">Close</button>
       <button class="btn btn-primary btn-sm" id="md-edit-btn">✏️ Edit</button>
     </div>
   </div>
 </div>
 
-<!-- ══════════════ MODAL: XÁC NHẬN XÓA ══════════════ -->
-<div class="modal-backdrop" id="modal-confirm">
-  <div class="modal confirm-modal">
-    <div class="confirm-hd">
-      <span class="confirm-icon-diamond"><span>!</span></span>
-      <span class="confirm-title" id="confirm-title">Remove Month</span>
-    </div>
-    <div class="confirm-bd">
-      <p class="confirm-question" id="confirm-question"></p>
-      <div class="confirm-divider"></div>
-      <div id="confirm-fields"></div>
-    </div>
-    <div class="confirm-ft">
-      <button class="btn btn-confirm-yes" id="confirm-yes-btn">Yes!</button>
-      <button class="btn btn-confirm-no" onclick="closeModal('modal-confirm')">No, keep it</button>
-    </div>
+<!-- ══════════════ TRANG VOTE CHO NGƯỜI CHƠI ══════════════ -->
+<div id="voter-view">
+  <div style="text-align:center;padding:18px 0 14px">
+    <div style="font-size:34px">🏸</div>
+    <div style="font-size:17px;font-weight:700;margin-top:4px">Badminton Club</div>
+    <div style="font-size:12px;color:var(--muted)">Vote tham gia buổi đánh</div>
+  </div>
+  <div class="card"><div class="card-bd" id="vv-body">
+    <div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Đang tải…</div>
+  </div></div>
+  <div style="text-align:center;margin-top:16px">
+    <span onclick="adminLogin()" style="font-size:11px;color:var(--hint);cursor:pointer">Quản trị viên</span>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script src="script.js"></script>
-</body>
-</html>
+<script src="app.js"></script>
+</body></html>
