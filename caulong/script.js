@@ -323,6 +323,59 @@ function calcMemberAmount(session, memberId) {
   return Math.ceil(total / 1000) * 1000;
 }
 
+// ─── SESSION → PLAIN TEXT (for pasting into Messenger/Zalo groups) ──
+const VN_WEEKDAYS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"]; // Date.getDay(): 0=Sunday
+
+function buildSessionText(s) {
+  const d = new Date(s.date + "T00:00:00");
+  const dateBlock = `${VN_WEEKDAYS[d.getDay()]}--- ${d.getDate()}/${d.getMonth() + 1}`;
+
+  const activeMembers = s.members.filter((m) => calcMemberAmount(s, m.id) > 0);
+  const amounts = activeMembers.map((m) => calcMemberAmount(s, m.id));
+  const allEqual =
+    amounts.length > 0 && amounts.every((a) => a === amounts[0]);
+  const memberBlock =
+    activeMembers.length === 0
+      ? ""
+      : allEqual
+        ? `Mỗi mem ${Math.round(amounts[0] / 1000)}k`
+        : activeMembers
+            .map(
+              (m) =>
+                `${m.name}: ${Math.round(calcMemberAmount(s, m.id) / 1000)}k`,
+            )
+            .join("\n");
+
+  const costBlock = s.costs
+    .filter((c) => c.name || c.amount > 0)
+    .map((c) => {
+      const amtK = Math.round(c.amount / 1000);
+      return c.qty ? `${c.name}: ${amtK} (${c.qty})` : `${c.name}: ${amtK}`;
+    })
+    .join("\n");
+
+  const namesBlock = activeMembers.map((m) => m.name).join(", ");
+
+  return [dateBlock, memberBlock, costBlock, namesBlock]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function copySessionText(sid) {
+  const s = sessions.find((x) => x.id === sid);
+  if (!s) return;
+  const text = buildSessionText(s);
+  const done = () => showToast("📋 Copied! Paste it into Messenger");
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard
+      .writeText(text)
+      .then(done)
+      .catch(() => prompt("Copy this text:", text));
+  } else {
+    prompt("Copy this text:", text);
+  }
+}
+
 // ─── SESSIONS TAB ─────────────────────────────────────────────────
 function renderSessions() {
   // Global stats
@@ -479,6 +532,7 @@ function openNewSession() {
     name: p.name,
     emoji: p.emoji,
     amount: p.amount * 1000,
+    qty: "",
     memberIds: [],
   }));
   // Default: fixed members auto-selected for all costs; casual NOT pre-selected
@@ -523,6 +577,7 @@ function addCostLine() {
     name: "",
     emoji: "🗒️",
     amount: 0,
+    qty: "",
     memberIds: [],
   });
   renderCostLines();
@@ -563,10 +618,16 @@ function renderCostLines() {
       return `<div class="cost-line" data-cid="${c.id}">
       <span class="cost-line-emoji">${c.emoji}</span>
       <div style="flex:1;min-width:0">
-        <input class="cost-name-inp" type="text" placeholder="Cost name…" value="${esc(c.name)}"
-          style="width:100%;margin-bottom:6px"
-          oninput="tempCosts.find(x=>x.id==='${c.id}').name=this.value"
-          maxlength="30">
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input class="cost-name-inp" type="text" placeholder="Cost name…" value="${esc(c.name)}"
+            style="flex:1;min-width:0"
+            oninput="tempCosts.find(x=>x.id==='${c.id}').name=this.value"
+            maxlength="30">
+          <input type="text" placeholder="qty" title="Optional quantity, e.g. 2 courts, 5 shuttles — shown as (qty) in text export" value="${esc(c.qty || "")}"
+            style="width:52px;flex-shrink:0;text-align:center"
+            oninput="tempCosts.find(x=>x.id==='${c.id}').qty=this.value"
+            maxlength="10">
+        </div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Apply to:</div>
         <div class="share-toggle">${allToggle}${toggles}</div>
       </div>
@@ -763,6 +824,8 @@ function openDetail(sid) {
   document.getElementById("md-title").textContent = s.note || fmtDate(s.date);
   document.getElementById("md-edit-btn").onclick = () => openEditSession(sid);
   document.getElementById("md-del-btn").onclick = () => deleteSession(sid);
+  document.getElementById("md-copy-text-btn").onclick = () =>
+    copySessionText(sid);
 
   // Only count members who have amt > 0 (i.e. are in at least one cost item)
   const activeMembers = s.members.filter((m) => calcMemberAmount(s, m.id) > 0);
@@ -1273,6 +1336,60 @@ function showConfirm(opts) {
   });
 }
 
+// Jira-styled input prompt (used for admin code entry) — replaces native prompt().
+// Returns the entered string, or null if cancelled/closed.
+function showPrompt(opts) {
+  const {
+    title = "Admin Access",
+    label = "",
+    placeholder = "",
+    confirmText = "Log in",
+    cancelText = "Cancel",
+  } = opts || {};
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "jira-prompt-backdrop";
+    backdrop.innerHTML = `
+      <div class="jira-prompt-box">
+        <div class="jira-prompt-hd">
+          <span class="jira-prompt-title">${esc(title)}</span>
+          <button type="button" class="jira-prompt-close" aria-label="Close">×</button>
+        </div>
+        <div class="jira-prompt-bd">
+          ${label ? `<label class="jira-prompt-label">${esc(label)}</label>` : ""}
+          <input type="text" class="jira-prompt-input" placeholder="${esc(placeholder)}" autocomplete="off">
+        </div>
+        <div class="jira-prompt-ft">
+          <button type="button" class="jira-btn jira-btn-secondary">${esc(cancelText)}</button>
+          <button type="button" class="jira-btn jira-btn-primary">${esc(confirmText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const input = backdrop.querySelector(".jira-prompt-input");
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      document.removeEventListener("keydown", onKey);
+      backdrop.remove();
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") finish(null);
+      if (e.key === "Enter") finish(input.value);
+    };
+    document.addEventListener("keydown", onKey);
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) finish(null);
+    });
+    backdrop.querySelector(".jira-prompt-close").onclick = () => finish(null);
+    backdrop.querySelector(".jira-btn-secondary").onclick = () => finish(null);
+    backdrop.querySelector(".jira-btn-primary").onclick = () =>
+      finish(input.value);
+    setTimeout(() => input.focus(), 30);
+  });
+}
+
 // ─── BACKUP / RESTORE ─────────────────────────────────────────────
 function backupData() {
   const data = { members, sessions, exported: new Date().toISOString() };
@@ -1580,10 +1697,11 @@ let pollsCache = {},
   editingPollId = null;
 
 // Default vote options for a new poll. Admin can add/rename/delete options
-// per-poll from the "Create/Edit Vote" card — this is just the starting set.
+// per-poll from the "Create/Edit Vote" card; members can also add options
+// from the public vote page itself (but can't edit or delete any option).
 const DEFAULT_POLL_OPTIONS = [
-  { id: "in", icon: "✅", label: "Join" },
-  { id: "out", icon: "❌", label: "Can't make it" },
+  { id: "in", label: "Join" },
+  { id: "out", label: "Can't make it" },
 ];
 // Color palette cycled by option position, used for chips/avatars/rows.
 const OPTION_PALETTE = [
@@ -1598,10 +1716,14 @@ function optColor(i) {
 }
 // Options for a given poll, falling back to the defaults for old polls
 // created before this feature (which have no `options` field saved).
+// `options` may be a plain array (admin create/edit) or a keyed object
+// (options members pushed in from the vote page) — both work here.
 function pollOptions(p) {
-  return p && Array.isArray(p.options) && p.options.length > 0
-    ? p.options
-    : DEFAULT_POLL_OPTIONS;
+  if (p && p.options && typeof p.options === "object") {
+    const arr = Object.values(p.options).filter((o) => o && o.label);
+    if (arr.length > 0) return arr;
+  }
+  return DEFAULT_POLL_OPTIONS;
 }
 
 // ─── Poll options editor (used inside the Create/Edit Vote card) ──
@@ -1614,9 +1736,6 @@ function renderPollOptionsEditor() {
     .map(
       (o) => `
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-      <input type="text" value="${esc(o.icon)}" maxlength="4"
-        style="width:44px;flex-shrink:0;text-align:center"
-        oninput="updatePollOptionField('${o.id}','icon',this.value)">
       <input type="text" value="${esc(o.label)}" maxlength="30" placeholder="Option label…" style="flex:1"
         oninput="updatePollOptionField('${o.id}','label',this.value)">
       <button class="btn-icon" onclick="removePollOption('${o.id}')" title="Delete option"
@@ -1655,16 +1774,13 @@ async function removePollOption(oid) {
 }
 
 function addPollOption() {
-  const iconInp = document.getElementById("vp-new-option-icon");
   const labelInp = document.getElementById("vp-new-option-label");
-  const icon = iconInp.value.trim() || "🔘";
   const label = labelInp.value.trim();
   if (!label) {
     showToast("Enter an option label first");
     return;
   }
-  tempPollOptions.push({ id: uid(), icon, label });
-  iconInp.value = "";
+  tempPollOptions.push({ id: uid(), label });
   labelInp.value = "";
   renderPollOptionsEditor();
   labelInp.focus();
@@ -1722,7 +1838,6 @@ function createPoll() {
   const options = tempPollOptions
     .map((o) => ({
       id: o.id,
-      icon: (o.icon || "🔘").trim(),
       label: o.label.trim(),
     }))
     .filter((o) => o.label);
@@ -1867,6 +1982,10 @@ function pollVotesFor(p, optionId) {
     .sort((a, b) => (a.at || 0) - (b.at || 0));
 }
 
+function optDot(tone) {
+  return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${tone.solid};margin-right:5px;flex-shrink:0"></span>`;
+}
+
 function renderPollList() {
   const wrap = document.getElementById("poll-list");
   const ids = Object.keys(pollsCache);
@@ -1885,7 +2004,10 @@ function renderPollList() {
       const open = p.status === "open";
       const exp = pollExpanded[pid];
       const summary = groups
-        .map((g) => `${g.icon} ${g.votes.length}`)
+        .map(
+          (g) =>
+            `<span style="display:inline-flex;align-items:center">${optDot(g.tone)}${g.votes.length}</span>`,
+        )
         .join(" &nbsp;·&nbsp; ");
       let detail = "";
       if (exp) {
@@ -1893,7 +2015,7 @@ function renderPollList() {
         ${groups
           .map(
             (g) => `
-          <div style="font-size:11px;font-weight:600;color:${g.tone.text};margin:8px 0 4px">${g.icon} ${esc(g.label)} (${g.votes.length})</div>
+          <div style="display:flex;align-items:center;font-size:11px;font-weight:600;color:${g.tone.text};margin:8px 0 4px">${optDot(g.tone)}${esc(g.label)} (${g.votes.length})</div>
           <div>${g.votes.length ? g.votes.map((v) => `<span class="vote-chip" style="background:${g.tone.bg};border-color:${g.tone.border};color:${g.tone.text}">${esc(v.name)}</span>`).join("") : '<span style="font-size:12px;color:var(--hint)">No one yet</span>'}</div>`,
           )
           .join("")}
@@ -1960,6 +2082,7 @@ function createSessionFromPoll(pid) {
     name: pr.name,
     emoji: pr.emoji,
     amount: pr.amount * 1000,
+    qty: "",
     memberIds: [],
   }));
   const incIds = tempMembers.filter((m) => m.included).map((m) => m.id);
@@ -2078,13 +2201,193 @@ function initVoterLatest() {
     );
 }
 
-function adminLogin() {
-  const p = prompt("Enter admin code:");
+// ─── ADMIN CODE RATE-LIMITING / LOCKOUT (per IP, shared via Firebase) ─────
+// - Every wrong attempt: short escalating delay before the next try — 1s, 2s, 4s, 8s, doubling.
+// - Every 3 wrong attempts: a bigger lockout kicks in — 10 min (1st time), 30 min (2nd time), 24h (3rd+ time).
+// - If an IP reaches the 24h tier on 2 different calendar days, that IP is permanently blocked.
+// Note: this is enforced client-side against a shared Firebase record keyed by public IP
+// (looked up via api.ipify.org). It stops casual guessing well, but — like any client-side
+// check — someone technical enough to edit the page's JS or call Firebase directly, or who
+// switches to a different IP/VPN, can get around it. If Firebase isn't reachable or the IP
+// lookup fails, it falls back to a per-device (localStorage) check instead of per-IP.
+const ADMIN_LOCK_TIERS_MS = [10 * 60 * 1000, 30 * 60 * 1000, 24 * 60 * 60 * 1000]; // 10min, 30min, 24h
+const ADMIN_ATTEMPTS_BEFORE_LOCK = 3;
+
+let _cachedClientIp = null;
+async function getClientIp() {
+  if (_cachedClientIp) return _cachedClientIp;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const res = await fetch("https://api.ipify.org?format=json", {
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    const data = await res.json();
+    if (data && data.ip) {
+      _cachedClientIp = data.ip;
+      return _cachedClientIp;
+    }
+  } catch (e) {
+    console.error("IP lookup failed", e);
+  }
+  return null;
+}
+function lockKeyFor(ip) {
+  // Firebase keys can't contain '.', ':', '#', '$', '[', ']', '/'
+  return ip ? "ip_" + ip.replace(/[^a-zA-Z0-9]/g, "_") : "dev_" + getDeviceId();
+}
+function defaultLockRecord() {
+  return {
+    wrongCount: 0,
+    delayStep: 0,
+    lockTier: 0,
+    lockUntil: 0,
+    nextAttemptAt: 0,
+    tier3Dates: {},
+    permaBanned: false,
+  };
+}
+async function lockStoreGet(key) {
+  if (fbReady()) {
+    try {
+      const snap = await fdb.ref("adminLockouts/" + key).once("value");
+      return snap.val();
+    } catch (e) {
+      console.error("Lock store read failed", e);
+    }
+  }
+  return ls("hl_lock_" + key);
+}
+async function lockStoreSet(key, rec) {
+  if (fbReady()) {
+    try {
+      await fdb.ref("adminLockouts/" + key).set(rec);
+      return;
+    } catch (e) {
+      console.error("Lock store write failed", e);
+    }
+  }
+  ss("hl_lock_" + key, rec);
+}
+function formatDuration(ms) {
+  if (ms <= 0) return "0s";
+  const totalSec = Math.ceil(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const parts = [];
+  if (h) parts.push(h + "h");
+  if (m) parts.push(m + "m");
+  if (!h && s) parts.push(s + "s");
+  return parts.join(" ") || "0s";
+}
+
+// Call with no `code` to just check whether this IP is currently gated (locked/banned)
+// without recording an attempt. Call with a `code` to actually submit an admin-code attempt.
+async function evaluateAdminAttempt(code) {
+  const ip = await getClientIp();
+  const key = lockKeyFor(ip);
+  const rec = { ...defaultLockRecord(), ...((await lockStoreGet(key)) || {}) };
+  const now = Date.now();
+
+  if (rec.permaBanned) {
+    return {
+      ok: false,
+      gated: true,
+      message:
+        "🚫 This IP has been permanently blocked for repeated failed admin login attempts.",
+    };
+  }
+  if (rec.lockUntil && rec.lockUntil > now) {
+    return {
+      ok: false,
+      gated: true,
+      message: `🔒 Too many failed attempts. Try again in ${formatDuration(rec.lockUntil - now)}.`,
+    };
+  }
+  if (rec.nextAttemptAt && rec.nextAttemptAt > now) {
+    return {
+      ok: false,
+      gated: true,
+      message: `⏳ Please wait ${formatDuration(rec.nextAttemptAt - now)} before trying again.`,
+    };
+  }
+
+  if (code === undefined) return { ok: true, gated: false };
+
+  if (code === ADMIN_PIN) {
+    rec.wrongCount = 0;
+    rec.delayStep = 0;
+    rec.nextAttemptAt = 0;
+    await lockStoreSet(key, rec);
+    return { ok: true };
+  }
+
+  // Wrong code
+  rec.wrongCount += 1;
+  if (rec.wrongCount >= ADMIN_ATTEMPTS_BEFORE_LOCK) {
+    const tierIdx = Math.min(rec.lockTier, ADMIN_LOCK_TIERS_MS.length - 1);
+    const durationMs = ADMIN_LOCK_TIERS_MS[tierIdx];
+    rec.lockTier = Math.min(rec.lockTier + 1, ADMIN_LOCK_TIERS_MS.length);
+    rec.lockUntil = now + durationMs;
+    rec.wrongCount = 0;
+    rec.delayStep = 0;
+    rec.nextAttemptAt = 0;
+    // Hitting the 24h tier on 2 different calendar days → permanent block
+    if (tierIdx === ADMIN_LOCK_TIERS_MS.length - 1) {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      rec.tier3Dates = rec.tier3Dates || {};
+      rec.tier3Dates[todayKey] = true;
+      if (Object.keys(rec.tier3Dates).length >= 2) {
+        rec.permaBanned = true;
+      }
+    }
+    await lockStoreSet(key, rec);
+    if (rec.permaBanned) {
+      return {
+        ok: false,
+        message:
+          "🚫 Too many violations across multiple days. This IP is now permanently blocked.",
+      };
+    }
+    return {
+      ok: false,
+      message: `🔒 Wrong code ${ADMIN_ATTEMPTS_BEFORE_LOCK} times. Locked for ${formatDuration(durationMs)}.`,
+    };
+  }
+
+  const delaySec = Math.pow(2, rec.delayStep);
+  rec.delayStep += 1;
+  rec.nextAttemptAt = now + delaySec * 1000;
+  await lockStoreSet(key, rec);
+  return {
+    ok: false,
+    message: `Wrong code. Please wait ${delaySec}s before trying again.`,
+  };
+}
+
+async function adminLogin() {
+  const gate = await evaluateAdminAttempt();
+  if (!gate.ok) {
+    showToast(gate.message);
+    return;
+  }
+  const p = await showPrompt({
+    title: "Admin Access",
+    label: "Admin code",
+    placeholder: "Enter admin code",
+    confirmText: "Log in",
+    cancelText: "Cancel",
+  });
   if (p === null) return;
-  if (p === ADMIN_PIN) {
+  const result = await evaluateAdminAttempt(p);
+  if (result.ok) {
     ss("hl_admin", 1);
     location.href = location.pathname;
-  } else showToast("Wrong code");
+  } else {
+    showToast(result.message);
+  }
 }
 
 function avatarStack(arr, tone) {
@@ -2100,12 +2403,12 @@ function toggleVvList(oid) {
 }
 
 function fbOptRow(group, myVote, open) {
-  const { id, icon, label, votes, tone } = group;
+  const { id, label, votes, tone } = group;
   const sel = myVote === id;
   const expanded = vvExpanded.has(id);
   return `<div class="fb-opt ${sel ? "sel" : ""} ${open ? "" : "disabled"}" onclick="${open ? `castVote('${id}')` : ""}">
       <span class="fb-check">${sel ? "✓" : ""}</span>
-      <div style="flex:1;font-size:15px;font-weight:500">${icon} ${esc(label)}</div>
+      <div style="flex:1;font-size:15px;font-weight:500;display:flex;align-items:center">${optDot(tone)}${esc(label)}</div>
       <div onclick="event.stopPropagation();toggleVvList('${id}')" style="display:flex;align-items:center;gap:7px;padding:2px 4px">
         ${votes.length ? avatarStack(votes, tone) : ""}
         <span style="font-size:13px;color:var(--muted);font-weight:600">${votes.length}</span>
@@ -2148,6 +2451,14 @@ function renderVoterView() {
         <input type="text" id="vv-name" placeholder="Enter your full name…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()">
         <div style="font-size:11px;color:var(--muted);margin-top:5px">⚠️ After your first vote, this name will be locked to this device to prevent voting on someone else's behalf.</div>
       </div>`;
+  const myGroup = groups.find((g) => g.id === myVote);
+  const addOptionBox = open
+    ? `<div style="display:flex;gap:6px;margin-top:10px">
+        <input type="text" id="vv-new-option" placeholder="Suggest another option…" maxlength="30" style="flex:1"
+          onkeydown="if(event.key==='Enter'){addVoterOption();}">
+        <button class="btn btn-ghost btn-sm" onclick="addVoterOption()" style="white-space:nowrap">+ Add option</button>
+      </div>`
+    : "";
   body.innerHTML = `
     <div style="text-align:center;margin-bottom:14px">
       <div style="font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(title)}</div>
@@ -2157,7 +2468,44 @@ function renderVoterView() {
     </div>
     ${nameBox}
     ${groups.map((g) => fbOptRow(g, myVote, open)).join("")}
-    <div id="vv-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:6px">${myVote ? "You voted: " + (groups.find((g) => g.id === myVote) ? groups.find((g) => g.id === myVote).icon + " " + esc(groups.find((g) => g.id === myVote).label) : "—") + " — tap another option to change" : open ? (lockedName ? "Tap an option to vote" : "") : ""}</div>`;
+    ${addOptionBox}
+    <div id="vv-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:6px">${myVote ? "You voted: " + (myGroup ? esc(myGroup.label) : "—") + " — tap another option to change" : open ? (lockedName ? "Tap an option to vote" : "") : ""}</div>`;
+}
+
+// Members can suggest a new vote option from the public vote page itself,
+// but can't rename or delete any option (only the admin can, from the
+// Create/Edit Vote card). Pushed as its own Firebase child so two people
+// adding an option at the same time never overwrite each other.
+function addVoterOption() {
+  if (!voterPoll || voterPoll.status !== "open") {
+    showToast("This vote is closed");
+    return;
+  }
+  const inp = document.getElementById("vv-new-option");
+  const label = inp ? inp.value.trim() : "";
+  if (!label) {
+    showToast("Enter an option label first");
+    return;
+  }
+  const existing = pollOptions(voterPoll);
+  if (existing.some((o) => nameKey(o.label) === nameKey(label))) {
+    showToast("That option already exists");
+    return;
+  }
+  const ref = fdb.ref("polls/" + voterPid + "/options").push();
+  const lockedName = (ls("hl_voter_locked_name") || "").trim();
+  ref
+    .set({ id: ref.key, label, addedBy: lockedName || null, at: Date.now() })
+    .then(() => {
+      if (inp) inp.value = "";
+      showToast("Option added ✅");
+    })
+    .catch((err) => {
+      console.error(err);
+      showToast(
+        "Error: " + (err && err.message ? err.message : "couldn't connect"),
+      );
+    });
 }
 
 function renderVoterNameHint() {
@@ -2206,7 +2554,7 @@ function castVote(choice) {
     .set({ name, choice, at: Date.now(), nameKey: nameKey(name) })
     .then(() => {
       const opt = pollOptions(voterPoll).find((o) => o.id === choice);
-      showToast(opt ? `Voted: ${opt.icon} ${opt.label}` : "Vote saved");
+      showToast(opt ? `Voted: ${opt.label}` : "Vote saved");
       renderVoterView();
     })
     .catch((err) => {
@@ -2240,16 +2588,17 @@ renderSessions();
 // - Người khác mở link web → chỉ thấy trang Vote (cuộc vote đang mở mới nhất)
 // - Có ?poll=<id> → luôn hiển thị đúng cuộc vote đó (kể cả admin, tiện xem trước)
 // - Có ?admin=<PIN> → mở khóa admin cho máy này rồi tự xóa PIN khỏi URL
-(function () {
+(async function () {
   const params = new URLSearchParams(location.search);
   const pin = params.get("admin");
   if (pin !== null) {
-    if (pin === ADMIN_PIN) {
+    history.replaceState(null, "", location.pathname);
+    const result = await evaluateAdminAttempt(pin);
+    if (result.ok) {
       ss("hl_admin", 1);
-      history.replaceState(null, "", location.pathname);
-    } else {
-      history.replaceState(null, "", location.pathname);
     }
+    // Wrong/locked/banned attempts via URL are ignored silently (same as before) —
+    // the lockout record is still updated by evaluateAdminAttempt() either way.
   }
   const pid = new URLSearchParams(location.search).get("poll");
   const isAdmin = !!ls("hl_admin");
