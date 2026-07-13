@@ -185,10 +185,13 @@ function toggleMemberType(id) {
   showToast(m.name + " → " + (m.type === "fixed" ? "Fixed" : "Casual"));
 }
 
-function deleteMember(id) {
+async function deleteMember(id) {
   const m = members.find((m) => m.id === id);
   if (
-    !confirm('Delete member "' + m.name + '"? Data in sessions will be kept.')
+    !(await showConfirm({
+      title: "Delete member",
+      message: `Delete member "${m.name}"? Data in sessions will be kept.`,
+    }))
   )
     return;
   members = members.filter((m) => m.id !== id);
@@ -247,7 +250,7 @@ function memberDebt(mid) {
   return total_debt;
 }
 
-function markMemberPaidAll(mid) {
+async function markMemberPaidAll(mid) {
   const m = members.find((x) => x.id === mid);
   if (!m) return;
   const debt = memberDebt(mid);
@@ -256,13 +259,13 @@ function markMemberPaidAll(mid) {
     return;
   }
   if (
-    !confirm(
-      'Mark "' +
-        m.name +
-        '" as Paid in every unpaid session (outstanding ' +
-        fmt(debt) +
-        ")?",
-    )
+    !(await showConfirm({
+      title: "Mark all as paid",
+      tone: "info",
+      message: `Mark "${m.name}" as Paid in every unpaid session (outstanding ${fmt(debt)})?`,
+      yesText: "Yes!",
+      noText: "Cancel",
+    }))
   )
     return;
   let count = 0;
@@ -874,9 +877,15 @@ function markAllPaid(sid) {
   showToast("✓ All marked as paid");
 }
 
-function deleteSession(sid) {
+async function deleteSession(sid) {
   const s = sessions.find((x) => x.id === sid);
-  if (!confirm('Delete session "' + (s.note || fmtDate(s.date)) + '"?')) return;
+  if (
+    !(await showConfirm({
+      title: "Delete session",
+      message: `Delete session "${s.note || fmtDate(s.date)}"?`,
+    }))
+  )
+    return;
   sessions = sessions.filter((x) => x.id !== sid);
   ss("hl_sessions", sessions);
   closeModal("modal-detail");
@@ -1212,6 +1221,58 @@ function showToast(msg) {
   _tt = setTimeout(() => el.classList.remove("show"), 2400);
 }
 
+// ─── CUSTOM CONFIRM DIALOG (thay cho confirm() mặc định của trình duyệt) ──
+// showConfirm({title, message, yesText, noText, tone}) → Promise<boolean>
+// tone: 'danger' (mặc định, icon đỏ) | 'info' (icon xanh)
+function showConfirm(opts) {
+  const {
+    title = "Xác nhận",
+    message = "",
+    yesText = "Yes!",
+    noText = "No, keep it",
+    tone = "danger",
+  } = typeof opts === "string" ? { message: opts } : opts || {};
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "confirm-backdrop";
+    backdrop.innerHTML = `
+      <div class="confirm-box">
+        <div class="confirm-hd">
+          <div class="confirm-icon-wrap ${tone === "info" ? "info" : ""}">
+            <div class="diamond"></div>
+            <div class="mark">!</div>
+          </div>
+          <div class="confirm-title">${esc(title)}</div>
+        </div>
+        <div class="confirm-msg">${esc(message)}</div>
+        <div class="confirm-actions">
+          <button class="confirm-btn confirm-btn-no" type="button">${esc(noText)}</button>
+          <button class="confirm-btn confirm-btn-yes" type="button">${esc(yesText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      document.removeEventListener("keydown", onKey);
+      backdrop.remove();
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") finish(false);
+      if (e.key === "Enter") finish(true);
+    };
+    document.addEventListener("keydown", onKey);
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) finish(false);
+    });
+    backdrop.querySelector(".confirm-btn-yes").onclick = () => finish(true);
+    backdrop.querySelector(".confirm-btn-no").onclick = () => finish(false);
+    backdrop.querySelector(".confirm-btn-yes").focus();
+  });
+}
+
 // ─── BACKUP / RESTORE ─────────────────────────────────────────────
 function backupData() {
   const data = { members, sessions, exported: new Date().toISOString() };
@@ -1243,16 +1304,15 @@ function restoreData(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const data = JSON.parse(e.target.result);
       if (!data.members || !data.sessions) throw new Error("Invalid file");
       if (
-        !confirm(
-          'Restore data from file "' +
-            file.name +
-            '"?\nCurrent data will be overwritten.',
-        )
+        !(await showConfirm({
+          title: "Restore data",
+          message: `Restore data from file "${file.name}"?\nCurrent data will be overwritten.`,
+        }))
       )
         return;
       members = data.members;
@@ -1519,6 +1579,97 @@ let pollsCache = {},
   pollExpanded = {},
   editingPollId = null;
 
+// Default vote options for a new poll. Admin can add/rename/delete options
+// per-poll from the "Create/Edit Vote" card — this is just the starting set.
+const DEFAULT_POLL_OPTIONS = [
+  { id: "in", icon: "✅", label: "Join" },
+  { id: "out", icon: "❌", label: "Can't make it" },
+];
+// Color palette cycled by option position, used for chips/avatars/rows.
+const OPTION_PALETTE = [
+  { bg: "var(--green-l)", border: "var(--green-m)", text: "var(--green-d)", solid: "var(--green)" },
+  { bg: "var(--coral-l)", border: "var(--coral-m)", text: "#712B13", solid: "var(--coral)" },
+  { bg: "var(--amber-l)", border: "var(--amber)", text: "#633806", solid: "var(--amber)" },
+  { bg: "var(--blue-l)", border: "var(--blue)", text: "var(--blue)", solid: "var(--blue)" },
+  { bg: "var(--purple-l)", border: "var(--purple)", text: "var(--purple)", solid: "var(--purple)" },
+];
+function optColor(i) {
+  return OPTION_PALETTE[i % OPTION_PALETTE.length];
+}
+// Options for a given poll, falling back to the defaults for old polls
+// created before this feature (which have no `options` field saved).
+function pollOptions(p) {
+  return p && Array.isArray(p.options) && p.options.length > 0
+    ? p.options
+    : DEFAULT_POLL_OPTIONS;
+}
+
+// ─── Poll options editor (used inside the Create/Edit Vote card) ──
+let tempPollOptions = DEFAULT_POLL_OPTIONS.map((o) => ({ ...o }));
+
+function renderPollOptionsEditor() {
+  const wrap = document.getElementById("vp-options");
+  if (!wrap) return;
+  wrap.innerHTML = tempPollOptions
+    .map(
+      (o) => `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <input type="text" value="${esc(o.icon)}" maxlength="4"
+        style="width:44px;flex-shrink:0;text-align:center"
+        oninput="updatePollOptionField('${o.id}','icon',this.value)">
+      <input type="text" value="${esc(o.label)}" maxlength="30" placeholder="Option label…" style="flex:1"
+        oninput="updatePollOptionField('${o.id}','label',this.value)">
+      <button class="btn-icon" onclick="removePollOption('${o.id}')" title="Delete option"
+        ${tempPollOptions.length <= 1 ? 'disabled style="opacity:.3;cursor:not-allowed"' : ""}>×</button>
+    </div>`,
+    )
+    .join("");
+}
+
+function updatePollOptionField(oid, field, value) {
+  const o = tempPollOptions.find((x) => x.id === oid);
+  if (o) o[field] = value;
+}
+
+async function removePollOption(oid) {
+  if (tempPollOptions.length <= 1) return;
+  // Warn if people already voted for this option on the poll being edited
+  if (editingPollId) {
+    const p = pollsCache[editingPollId];
+    const voteCount =
+      p && p.votes
+        ? Object.values(p.votes).filter((v) => v.choice === oid).length
+        : 0;
+    if (voteCount > 0) {
+      const ok = await showConfirm({
+        title: "Delete option",
+        message: `${voteCount} member(s) already voted for this option. Delete it anyway? Their votes will stay recorded but won't match a visible option anymore.`,
+        yesText: "Delete anyway",
+        noText: "Cancel",
+      });
+      if (!ok) return;
+    }
+  }
+  tempPollOptions = tempPollOptions.filter((o) => o.id !== oid);
+  renderPollOptionsEditor();
+}
+
+function addPollOption() {
+  const iconInp = document.getElementById("vp-new-option-icon");
+  const labelInp = document.getElementById("vp-new-option-label");
+  const icon = iconInp.value.trim() || "🔘";
+  const label = labelInp.value.trim();
+  if (!label) {
+    showToast("Enter an option label first");
+    return;
+  }
+  tempPollOptions.push({ id: uid(), icon, label });
+  iconInp.value = "";
+  labelInp.value = "";
+  renderPollOptionsEditor();
+  labelInp.focus();
+}
+
 function renderVotePage() {
   const warn = document.getElementById("vote-setup-warn");
   const create = document.getElementById("vote-create-card");
@@ -1536,6 +1687,7 @@ function renderVotePage() {
       .slice(0, 10);
   }
   listenPolls();
+  renderPollOptionsEditor();
   renderPollList();
 }
 
@@ -1551,36 +1703,47 @@ function listenPolls() {
     },
     (err) => {
       console.error(err);
-      showToast("Không đọc được dữ liệu vote (kiểm tra Rules)");
+      showToast("Couldn't load vote data (check Firebase Rules)");
     },
   );
 }
 
 function createPoll() {
   if (!fbReady()) {
-    showToast("Chưa cấu hình Firebase");
+    showToast("Firebase isn't configured");
     return;
   }
   const date = document.getElementById("vp-date").value;
   if (!date) {
-    showToast("Chọn ngày trước nhé");
+    showToast("Pick a date first");
     return;
   }
   const note = document.getElementById("vp-note").value.trim();
+  const options = tempPollOptions
+    .map((o) => ({
+      id: o.id,
+      icon: (o.icon || "🔘").trim(),
+      label: o.label.trim(),
+    }))
+    .filter((o) => o.label);
+  if (options.length === 0) {
+    showToast("Add at least 1 vote option");
+    return;
+  }
 
   if (editingPollId) {
-    // Đang sửa cuộc vote có sẵn: chỉ cập nhật ngày/ghi chú, giữ nguyên toàn bộ vote đã có
+    // Editing an existing poll: update date/note/options, keep all votes as-is
     fdb
       .ref("polls/" + editingPollId)
-      .update({ date, note })
+      .update({ date, note, options })
       .then(() => {
-        showToast("Đã cập nhật vote ✏️");
+        showToast("Vote updated ✏️");
         cancelEditPoll();
       })
       .catch((err) => {
         console.error(err);
         showToast(
-          "Lỗi: " + (err && err.message ? err.message : "không kết nối được"),
+          "Error: " + (err && err.message ? err.message : "couldn't connect"),
         );
       });
     return;
@@ -1594,17 +1757,18 @@ function createPoll() {
       createdAt: Date.now(),
       status: "open",
       memberNames: members.map((m) => m.name),
+      options,
     })
     .then(() => {
       document.getElementById("vp-note").value = "";
-      showToast("Đã tạo vote 🗳️");
+      showToast("Vote created 🗳️");
       copyPollLink(ref.key, true);
     })
     .catch((err) => {
       console.error(err);
       showToast(
-        "Lỗi: " +
-          (err && err.message ? err.message : "không kết nối được Firebase"),
+        "Error: " +
+          (err && err.message ? err.message : "couldn't connect to Firebase"),
       );
     });
 }
@@ -1615,8 +1779,10 @@ function editPoll(pid) {
   editingPollId = pid;
   document.getElementById("vp-date").value = p.date || "";
   document.getElementById("vp-note").value = p.note || "";
-  document.getElementById("vote-create-title").textContent = "✏️ Sửa vote";
-  document.getElementById("vote-create-btn").textContent = "Lưu thay đổi";
+  tempPollOptions = pollOptions(p).map((o) => ({ ...o }));
+  renderPollOptionsEditor();
+  document.getElementById("vote-create-title").textContent = "✏️ Edit Vote";
+  document.getElementById("vote-create-btn").textContent = "Save Changes";
   document.getElementById("vote-create-cancel").style.display = "inline-flex";
   document
     .getElementById("vote-create-card")
@@ -1629,6 +1795,8 @@ function cancelEditPoll() {
     .toISOString()
     .slice(0, 10);
   document.getElementById("vp-note").value = "";
+  tempPollOptions = DEFAULT_POLL_OPTIONS.map((o) => ({ ...o }));
+  renderPollOptionsEditor();
   document.getElementById("vote-create-title").textContent = "Create Vote";
   document.getElementById("vote-create-btn").textContent = "+ Create Vote";
   document.getElementById("vote-create-cancel").style.display = "none";
@@ -1641,15 +1809,15 @@ function copyPollLink(pid, silent) {
   const url = pollLink(pid);
   const done = () =>
     showToast(
-      silent ? "Đã copy link vote 📋 — dán lên nhóm nhé" : "Đã copy link 📋",
+      silent ? "Vote link copied 📋 — share it with the group" : "Link copied 📋",
     );
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
       .writeText(url)
       .then(done)
-      .catch(() => prompt("Copy link vote:", url));
+      .catch(() => prompt("Copy vote link:", url));
   } else {
-    prompt("Copy link vote:", url);
+    prompt("Copy vote link:", url);
   }
 }
 
@@ -1660,25 +1828,43 @@ function togglePollStatus(pid) {
     .ref("polls/" + pid + "/status")
     .set(p.status === "open" ? "closed" : "open");
 }
-function deletePoll(pid) {
-  if (!confirm("Xóa cuộc vote này? Dữ liệu vote sẽ mất.")) return;
+async function deletePoll(pid) {
+  if (
+    !(await showConfirm({
+      title: "Delete vote",
+      message: "Delete this vote? All vote data will be lost.",
+      yesText: "Yes!",
+      noText: "No, keep it",
+    }))
+  )
+    return;
   fdb
     .ref("polls/" + pid)
     .remove()
-    .then(() => showToast("Đã xóa vote"));
+    .then(() => showToast("Vote deleted"));
 }
 function togglePollExpand(pid) {
   pollExpanded[pid] = !pollExpanded[pid];
   renderPollList();
 }
 
-function pollVoteArrays(p) {
+// Returns votes grouped by each option defined on the poll (or the defaults for old polls)
+function pollVotesByOption(p) {
   const votes = p.votes ? Object.values(p.votes) : [];
-  votes.sort((a, b) => (a.at || 0) - (b.at || 0));
-  return {
-    ins: votes.filter((v) => v.choice === "in"),
-    outs: votes.filter((v) => v.choice === "out"),
-  };
+  return pollOptions(p).map((o, i) => ({
+    ...o,
+    tone: optColor(i),
+    votes: votes
+      .filter((v) => v.choice === o.id)
+      .sort((a, b) => (a.at || 0) - (b.at || 0)),
+  }));
+}
+// Votes for one specific option id (e.g. the default "in" / Join option)
+function pollVotesFor(p, optionId) {
+  const votes = p.votes ? Object.values(p.votes) : [];
+  return votes
+    .filter((v) => v.choice === optionId)
+    .sort((a, b) => (a.at || 0) - (b.at || 0));
 }
 
 function renderPollList() {
@@ -1695,16 +1881,22 @@ function renderPollList() {
   wrap.innerHTML = ids
     .map((pid) => {
       const p = pollsCache[pid];
-      const { ins, outs } = pollVoteArrays(p);
+      const groups = pollVotesByOption(p);
       const open = p.status === "open";
       const exp = pollExpanded[pid];
+      const summary = groups
+        .map((g) => `${g.icon} ${g.votes.length}`)
+        .join(" &nbsp;·&nbsp; ");
       let detail = "";
       if (exp) {
         detail = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:600;color:var(--green-d);margin-bottom:4px">✅ Tham gia (${ins.length})</div>
-        <div>${ins.length ? ins.map((v) => `<span class="vote-chip in">${esc(v.name)}</span>`).join("") : '<span style="font-size:12px;color:var(--hint)">Chưa có ai</span>'}</div>
-        <div style="font-size:11px;font-weight:600;color:#712B13;margin:8px 0 4px">❌ Không tham gia (${outs.length})</div>
-        <div>${outs.length ? outs.map((v) => `<span class="vote-chip out">${esc(v.name)}</span>`).join("") : '<span style="font-size:12px;color:var(--hint)">Chưa có ai</span>'}</div>
+        ${groups
+          .map(
+            (g) => `
+          <div style="font-size:11px;font-weight:600;color:${g.tone.text};margin:8px 0 4px">${g.icon} ${esc(g.label)} (${g.votes.length})</div>
+          <div>${g.votes.length ? g.votes.map((v) => `<span class="vote-chip" style="background:${g.tone.bg};border-color:${g.tone.border};color:${g.tone.text}">${esc(v.name)}</span>`).join("") : '<span style="font-size:12px;color:var(--hint)">No one yet</span>'}</div>`,
+          )
+          .join("")}
       </div>`;
       }
       return `<div class="poll-item ${open ? "" : "closed"}">
@@ -1712,15 +1904,15 @@ function renderPollList() {
         <div style="flex:1;min-width:150px;cursor:pointer" onclick="togglePollExpand('${pid}')">
           <div style="font-size:13px;font-weight:600">${esc(fmtDate(p.date))}${p.note ? " · " + esc(p.note) : ""}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px">
-            <span class="badge-pill ${open ? "badge-green" : "badge-coral"}">${open ? "🟢 Đang mở" : "🔒 Đã đóng"}</span>
-            &nbsp;✅ ${ins.length} &nbsp;·&nbsp; ❌ ${outs.length}
+            <span class="badge-pill ${open ? "badge-green" : "badge-coral"}">${open ? "🟢 Open" : "🔒 Closed"}</span>
+            &nbsp;${summary}
           </div>
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-ghost btn-sm" onclick="copyPollLink('${pid}')">📋 Link</button>
-          <button class="btn btn-ghost btn-sm" onclick="editPoll('${pid}')">✏️ Sửa</button>
-          <button class="btn btn-ghost btn-sm" onclick="togglePollStatus('${pid}')">${open ? "🔒 Đóng" : "🔓 Mở lại"}</button>
-          <button class="btn btn-green btn-sm" onclick="createSessionFromPoll('${pid}')">🏸 Tạo buổi đánh</button>
+          <button class="btn btn-ghost btn-sm" onclick="editPoll('${pid}')">✏️ Edit</button>
+          <button class="btn btn-ghost btn-sm" onclick="togglePollStatus('${pid}')">${open ? "🔒 Close" : "🔓 Reopen"}</button>
+          <button class="btn btn-green btn-sm" onclick="createSessionFromPoll('${pid}')">🏸 Create Session</button>
           <button class="btn btn-danger btn-sm" onclick="deletePoll('${pid}')">🗑</button>
         </div>
       </div>
@@ -1730,16 +1922,17 @@ function renderPollList() {
     .join("");
 }
 
-// Tạo buổi đánh từ kết quả vote: người vote ✅ được thêm vào và tick sẵn chi phí
+// Create a new session from vote results: everyone who voted for the "Join"
+// option (✅) is added and pre-ticked in the cost split.
 function createSessionFromPoll(pid) {
   const p = pollsCache[pid];
   if (!p) return;
-  const { ins } = pollVoteArrays(p);
+  const ins = pollVotesFor(p, "in");
   if (ins.length === 0) {
-    showToast("Chưa có ai vote tham gia");
+    showToast("No one has voted to join yet");
     return;
   }
-  // Khớp tên người vote với thành viên (không phân biệt hoa/thường, dấu); tên lạ → thêm mới (Casual)
+  // Match voter names to members (case/accent-insensitive); unknown names → new Casual member
   const votedIds = new Set();
   ins.forEach((v) => {
     let m = members.find((mm) => nameKey(mm.name) === nameKey(v.name));
@@ -1757,7 +1950,7 @@ function createSessionFromPoll(pid) {
   document.getElementById("ms-date").value =
     p.date || new Date().toISOString().slice(0, 10);
   document.getElementById("ms-note").value = p.note || "Saturday";
-  // Chỉ tick sẵn những thành viên đã vote ✅ Tham gia (kể cả Fixed) — không tự động thêm ai khác
+  // Only pre-tick members who actually voted ✅ Join (including Fixed) — no one else added automatically
   tempMembers = members.map((m) => ({
     ...m,
     included: votedIds.has(m.id),
@@ -1786,7 +1979,7 @@ function initVoterView(pid) {
   const body = document.getElementById("vv-body");
   if (!fbReady()) {
     body.innerHTML =
-      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ Trang vote chưa được cấu hình. Liên hệ quản trị viên nhé.</div>';
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ The vote page isn\'t configured yet. Please contact the admin.</div>';
     return;
   }
   fdb.ref("polls/" + pid).on(
@@ -1799,18 +1992,18 @@ function initVoterView(pid) {
     (err) => {
       console.error(err);
       body.innerHTML =
-        '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Không tải được dữ liệu vote. Thử lại sau nhé.</div>';
+        '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.</div>';
     },
   );
 }
 
-let vvShowIn = false,
-  vvShowOut = false;
+let vvExpanded = new Set();
 const migratedLegacyVotePolls = new Set();
 
-// Với data cũ (trước khi đổi sang key theo deviceId): nếu thiết bị này đã khóa 1 tên
-// và trong poll có phiếu cũ lưu theo nameKey khớp tên đó nhưng chưa có phiếu theo deviceId,
-// chuyển phiếu cũ sang key deviceId (và xóa key cũ) để không bị hỏi vote lại / tạo phiếu trùng.
+// Legacy data migration (before switching to deviceId-based vote keys): if this
+// device previously locked a name and the poll has an old vote stored under
+// nameKey matching it but no deviceId-keyed vote yet, move it over (and remove
+// the old key) so the device isn't asked to vote again / doesn't get double counted.
 function migrateLegacyVote(pid, p) {
   if (!pid || !p || migratedLegacyVotePolls.has(pid)) return;
   const lockedName = (ls("hl_voter_locked_name") || "").trim();
@@ -1832,13 +2025,13 @@ function migrateLegacyVote(pid, p) {
     .catch((err) => console.error("Migrate legacy vote failed", err));
 }
 
-// Không có ?poll= → tự tìm cuộc vote đang mở mới nhất
+// No ?poll= param → automatically find the latest open vote
 function initVoterLatest() {
   document.body.classList.add("voter-mode");
   const body = document.getElementById("vv-body");
   if (!fbReady()) {
     body.innerHTML =
-      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ Trang vote chưa được cấu hình. Liên hệ quản trị viên nhé.</div>';
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ The vote page isn\'t configured yet. Please contact the admin.</div>';
     return;
   }
   fdb
@@ -1871,7 +2064,7 @@ function initVoterLatest() {
         voterPoll = best || any;
         if (!voterPid) {
           document.getElementById("vv-body").innerHTML =
-            '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Hiện chưa có cuộc vote nào. Quay lại sau nhé 🏸</div>';
+            '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No votes yet. Check back later 🏸</div>';
           return;
         }
         migrateLegacyVote(voterPid, voterPoll);
@@ -1880,58 +2073,59 @@ function initVoterLatest() {
       (err) => {
         console.error(err);
         body.innerHTML =
-          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Không tải được dữ liệu vote. Thử lại sau nhé.</div>';
+          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.</div>';
       },
     );
 }
 
 function adminLogin() {
-  const p = prompt("Nhập mã quản trị:");
+  const p = prompt("Enter admin code:");
   if (p === null) return;
   if (p === ADMIN_PIN) {
     ss("hl_admin", 1);
     location.href = location.pathname;
-  } else showToast("Sai mã rồi");
+  } else showToast("Wrong code");
 }
 
-function avatarStack(arr, kind) {
+function avatarStack(arr, tone) {
   const shown = arr.slice(0, 3);
   const more = arr.length - shown.length;
-  return `<span class="av-stack">${shown.map((v) => `<span class="av ${kind === "out" ? "out" : ""}">${esc(initials(v.name))}</span>`).join("")}${more > 0 ? `<span class="av more">+${more}</span>` : ""}</span>`;
+  return `<span class="av-stack">${shown.map((v) => `<span class="av" style="background:${tone.solid}">${esc(initials(v.name))}</span>`).join("")}${more > 0 ? `<span class="av more">+${more}</span>` : ""}</span>`;
 }
 
-function toggleVvList(kind) {
-  if (kind === "in") vvShowIn = !vvShowIn;
-  else vvShowOut = !vvShowOut;
+function toggleVvList(oid) {
+  if (vvExpanded.has(oid)) vvExpanded.delete(oid);
+  else vvExpanded.add(oid);
   renderVoterView();
 }
 
-function fbOptRow(kind, icon, label, arr, myVote, open) {
-  const sel = myVote === kind;
-  const expanded = kind === "in" ? vvShowIn : vvShowOut;
-  return `<div class="fb-opt ${sel ? "sel" : ""} ${open ? "" : "disabled"}" onclick="${open ? `castVote('${kind}')` : ""}">
+function fbOptRow(group, myVote, open) {
+  const { id, icon, label, votes, tone } = group;
+  const sel = myVote === id;
+  const expanded = vvExpanded.has(id);
+  return `<div class="fb-opt ${sel ? "sel" : ""} ${open ? "" : "disabled"}" onclick="${open ? `castVote('${id}')` : ""}">
       <span class="fb-check">${sel ? "✓" : ""}</span>
-      <div style="flex:1;font-size:15px;font-weight:500">${icon} ${label}</div>
-      <div onclick="event.stopPropagation();toggleVvList('${kind}')" style="display:flex;align-items:center;gap:7px;padding:2px 4px">
-        ${arr.length ? avatarStack(arr, kind) : ""}
-        <span style="font-size:13px;color:var(--muted);font-weight:600">${arr.length}</span>
+      <div style="flex:1;font-size:15px;font-weight:500">${icon} ${esc(label)}</div>
+      <div onclick="event.stopPropagation();toggleVvList('${id}')" style="display:flex;align-items:center;gap:7px;padding:2px 4px">
+        ${votes.length ? avatarStack(votes, tone) : ""}
+        <span style="font-size:13px;color:var(--muted);font-weight:600">${votes.length}</span>
       </div>
     </div>
-    ${expanded && arr.length ? `<div class="fb-opt-names">${arr.map((v) => `<span class="vote-chip ${kind}">${esc(v.name)}</span>`).join("")}</div>` : ""}`;
+    ${expanded && votes.length ? `<div class="fb-opt-names">${votes.map((v) => `<span class="vote-chip" style="background:${tone.bg};border-color:${tone.border};color:${tone.text}">${esc(v.name)}</span>`).join("")}</div>` : ""}`;
 }
 
 function renderVoterView() {
   const body = document.getElementById("vv-body");
   if (!voterPoll) {
     body.innerHTML =
-      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Cuộc vote không tồn tại hoặc đã bị xóa.</div>';
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">This vote doesn\'t exist or has been deleted.</div>';
     return;
   }
   const p = voterPoll;
   const open = p.status === "open";
   const lockedName = (ls("hl_voter_locked_name") || "").trim();
   const curInput = document.getElementById("vv-name");
-  const nameVal = lockedName ? lockedName : curInput ? curInput.value : ""; // giữ giá trị đang gõ khi re-render realtime
+  const nameVal = lockedName ? lockedName : curInput ? curInput.value : ""; // keep what's being typed on realtime re-render
   const myDevId = getDeviceId();
   const legacyKey = nameVal.trim() ? nameKey(nameVal) : null;
   const myVoteEntry =
@@ -1939,43 +2133,47 @@ function renderVoterView() {
     (legacyKey && p.votes && p.votes[legacyKey]) ||
     null;
   const myVote = myVoteEntry ? myVoteEntry.choice : null;
-  const { ins, outs } = pollVoteArrays(p);
-  const title = p.note || "Buổi cầu lông";
+  const groups = pollVotesByOption(p);
+  const title = p.note || "Badminton Session";
   const nameBox = lockedName
     ? `<div class="vv-name-box">
-        <label class="field-label">Đang vote với tên</label>
+        <label class="field-label">Voting as</label>
         <div style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:12px 14px">
           <span style="font-size:15px;font-weight:600;flex:1">👤 ${esc(lockedName)}</span>
-          <span onclick="resetVoterName()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">Không phải bạn?</span>
+          <span onclick="resetVoterName()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">Not you?</span>
         </div>
       </div>`
     : `<div class="vv-name-box">
-        <label class="field-label">Tên của bạn <span style="color:var(--coral-m)">*</span></label>
-        <input type="text" id="vv-name" placeholder="Nhập tên đầy đủ của bạn…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()">
-        <div style="font-size:11px;color:var(--muted);margin-top:5px">⚠️ Sau khi vote lần đầu, tên này sẽ được khóa với thiết bị này để tránh vote giùm người khác.</div>
+        <label class="field-label">Your name <span style="color:var(--coral-m)">*</span></label>
+        <input type="text" id="vv-name" placeholder="Enter your full name…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()">
+        <div style="font-size:11px;color:var(--muted);margin-top:5px">⚠️ After your first vote, this name will be locked to this device to prevent voting on someone else's behalf.</div>
       </div>`;
   body.innerHTML = `
-    <div style="margin-bottom:14px">
+    <div style="text-align:center;margin-bottom:14px">
       <div style="font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(title)}</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:3px">📅 ${esc(fmtDate(p.date))}
-        &nbsp;<span class="badge-pill ${open ? "badge-green" : "badge-coral"}">${open ? "🟢 Đang mở" : "🔒 Đã đóng"}</span>
+      <div style="font-size:16px;font-weight:600;color:var(--muted);margin-top:4px">${esc(fmtDate(p.date))}
+        &nbsp;<span class="badge-pill ${open ? "badge-green" : "badge-coral"}" style="vertical-align:middle">${open ? "🟢 Open" : "🔒 Closed"}</span>
       </div>
     </div>
     ${nameBox}
-    ${fbOptRow("in", "✅", "Tham gia", ins, myVote, open)}
-    ${fbOptRow("out", "❌", "Bận", outs, myVote, open)}
-    <div id="vv-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:6px">${myVote ? "Bạn đã vote: " + (myVote === "in" ? "✅ Tham gia" : "❌ Bận") + " — bấm ô kia để đổi" : open ? (lockedName ? "Bấm vào một ô để vote" : "") : ""}</div>`;
+    ${groups.map((g) => fbOptRow(g, myVote, open)).join("")}
+    <div id="vv-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:6px">${myVote ? "You voted: " + (groups.find((g) => g.id === myVote) ? groups.find((g) => g.id === myVote).icon + " " + esc(groups.find((g) => g.id === myVote).label) : "—") + " — tap another option to change" : open ? (lockedName ? "Tap an option to vote" : "") : ""}</div>`;
 }
 
 function renderVoterNameHint() {
-  // Không re-render toàn bộ (tránh mất focus khi đang gõ) — chỉ cập nhật nhẹ nếu cần sau này
+  // Don't re-render everything (avoid losing focus while typing) — light update only if needed later
 }
 
-function resetVoterName() {
+async function resetVoterName() {
   if (
-    !confirm(
-      "Đổi tên vote trên thiết bị này? Phiếu vote hiện tại của thiết bị này sẽ được cập nhật sang tên mới (không tạo thêm phiếu) — chỉ dùng nếu tên bị nhập sai, không dùng để vote thay người khác.",
-    )
+    !(await showConfirm({
+      title: "Change vote name?",
+      tone: "info",
+      message:
+        "This device's current vote will be updated to the new name (no extra vote is created) — only use this if the name was entered by mistake, not to vote on someone else's behalf.",
+      yesText: "Change name",
+      noText: "Cancel",
+    }))
   )
     return;
   try {
@@ -1986,7 +2184,7 @@ function resetVoterName() {
 
 function castVote(choice) {
   if (!voterPoll || voterPoll.status !== "open") {
-    showToast("Vote đã đóng rồi");
+    showToast("This vote is closed");
     return;
   }
   const lockedName = (ls("hl_voter_locked_name") || "").trim();
@@ -1995,27 +2193,26 @@ function castVote(choice) {
     const inp = document.getElementById("vv-name");
     name = inp ? inp.value.trim() : "";
     if (!name) {
-      showToast("Vui lòng nhập tên trước khi vote nhé");
+      showToast("Please enter your name before voting");
       return;
     }
-    // Khóa tên với thiết bị này ngay khi vote lần đầu — chống vote giùm người khác
+    // Lock the name to this device on first vote — prevents voting on someone else's behalf
     ss("hl_voter_locked_name", name);
   }
-  // Vote được lưu theo deviceId (cố định, không đổi khi đổi tên) → mỗi thiết bị
-  // chỉ có đúng 1 phiếu / cuộc vote, dù đổi tên qua "Không phải bạn?" bao nhiêu lần.
+  // Votes are keyed by deviceId (fixed, doesn't change when the name is changed) →
+  // each device only ever has 1 vote per poll, no matter how many times "Not you?" is used.
   fdb
     .ref("polls/" + voterPid + "/votes/" + getDeviceId())
     .set({ name, choice, at: Date.now(), nameKey: nameKey(name) })
     .then(() => {
-      showToast(
-        choice === "in" ? "Đã vote: Tham gia ✅" : "Đã vote: Không tham gia",
-      );
+      const opt = pollOptions(voterPoll).find((o) => o.id === choice);
+      showToast(opt ? `Voted: ${opt.icon} ${opt.label}` : "Vote saved");
       renderVoterView();
     })
     .catch((err) => {
       console.error(err);
       showToast(
-        "Lỗi: " + (err && err.message ? err.message : "không kết nối được"),
+        "Error: " + (err && err.message ? err.message : "couldn't connect"),
       );
     });
 }
