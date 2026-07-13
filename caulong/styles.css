@@ -265,3 +265,25 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
   .confirm-actions{flex-direction:column-reverse}
   .confirm-btn{width:100%;justify-content:center;text-align:center}
 }
+
+/* ─── JIRA-STYLE PROMPT DIALOG (admin code entry) ─── */
+.jira-prompt-backdrop{position:fixed;inset:0;background:rgba(9,30,66,.54);z-index:950;display:flex;align-items:center;justify-content:center;padding:1rem;animation:confirmFadeIn .12s ease-out}
+.jira-prompt-box{background:#fff;border-radius:3px;box-shadow:0 8px 24px rgba(9,30,66,.25),0 0 1px rgba(9,30,66,.31);max-width:400px;width:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif}
+.jira-prompt-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:20px 24px 0}
+.jira-prompt-title{font-size:20px;font-weight:500;color:#172B4D;line-height:1.3}
+.jira-prompt-close{background:none;border:none;font-size:20px;line-height:1;color:#42526E;cursor:pointer;padding:4px 6px;border-radius:3px;flex-shrink:0}
+.jira-prompt-close:hover{background:#EBECF0}
+.jira-prompt-bd{padding:16px 24px 4px}
+.jira-prompt-label{display:block;font-size:12px;font-weight:600;color:#5E6C84;margin-bottom:6px}
+.jira-prompt-input{width:100%;border:2px solid #DFE1E6;border-radius:3px;padding:8px 10px;font-size:14px;color:#172B4D;font-family:inherit;transition:border-color .1s;background:#FAFBFC}
+.jira-prompt-input:focus{outline:none;border-color:#4C9AFF;background:#fff;box-shadow:0 0 0 1px #4C9AFF}
+.jira-prompt-ft{display:flex;justify-content:flex-end;gap:8px;padding:20px 24px 24px}
+.jira-btn{border:none;border-radius:3px;padding:8px 14px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer;transition:background .1s}
+.jira-btn-primary{background:#0052CC;color:#fff}
+.jira-btn-primary:hover{background:#0065FF}
+.jira-btn-secondary{background:transparent;color:#42526E}
+.jira-btn-secondary:hover{background:#EBECF0}
+@media(max-width:520px){
+  .jira-prompt-ft{flex-direction:column-reverse}
+  .jira-btn{width:100%;text-align:center}
+}
