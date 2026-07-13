@@ -159,9 +159,9 @@
 <div class="page" id="tab-vote">
   <div id="vote-setup-warn" style="display:none" class="card">
     <div class="card-bd" style="font-size:13px;line-height:1.6">
-      <div style="font-weight:600;margin-bottom:6px">⚠️ Chưa cấu hình Firebase</div>
-      Để dùng tính năng vote, bạn cần tạo Firebase Realtime Database (miễn phí) và dán cấu hình vào biến <code>FIREBASE_CONFIG</code> ở đầu phần <code>&lt;script&gt;</code> trong file này.<br>
-      Các bước: vào <b>console.firebase.google.com</b> → Add project → Build → <b>Realtime Database</b> → Create database → Rules cho phép đọc/ghi nhánh <code>polls</code> → Project settings → Add web app → copy <code>firebaseConfig</code>.
+      <div style="font-weight:600;margin-bottom:6px">⚠️ Firebase not configured</div>
+      To use the vote feature, you need to create a Firebase Realtime Database (free) and paste the config into the <code>FIREBASE_CONFIG</code> variable at the top of the <code>&lt;script&gt;</code> section of this file.<br>
+      Steps: go to <b>console.firebase.google.com</b> → Add project → Build → <b>Realtime Database</b> → Create database → set Rules to allow read/write on the <code>polls</code> path → Project settings → Add web app → copy <code>firebaseConfig</code>.
     </div>
   </div>
   <div class="card" id="vote-create-card">
@@ -179,9 +179,18 @@
           <input type="text" id="vp-note" placeholder="E.g.: Court ABC, 18h-20h…" maxlength="60">
         </div>
       </div>
+      <div style="margin-bottom:10px">
+        <label class="field-label">Vote Options</label>
+        <div id="vp-options"></div>
+        <div class="input-row" style="margin-top:6px">
+          <input type="text" id="vp-new-option-icon" placeholder="Icon" maxlength="4" style="width:56px;flex-shrink:0;text-align:center">
+          <input type="text" id="vp-new-option-label" placeholder="Option label…" maxlength="30">
+          <button class="btn btn-ghost btn-sm" onclick="addPollOption()" style="white-space:nowrap">+ Add</button>
+        </div>
+      </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" id="vote-create-btn" onclick="createPoll()">+ Create Vote</button>
-        <button class="btn btn-ghost" id="vote-create-cancel" style="display:none" onclick="cancelEditPoll()">Hủy</button>
+        <button class="btn btn-ghost" id="vote-create-cancel" style="display:none" onclick="cancelEditPoll()">Cancel</button>
       </div>
     </div>
   </div>
@@ -241,18 +250,18 @@
   </div>
 </div>
 
-<!-- ══════════════ TRANG VOTE CHO NGƯỜI CHƠI ══════════════ -->
+<!-- ══════════════ PLAYER VOTE PAGE ══════════════ -->
 <div id="voter-view">
   <div style="text-align:center;padding:18px 0 14px">
     <div style="font-size:34px">🏸</div>
     <div style="font-size:17px;font-weight:700;margin-top:4px">Badminton Club</div>
-    <div style="font-size:12px;color:var(--muted)">Vote tham gia buổi đánh</div>
+    <div style="font-size:12px;color:var(--muted)">Vote to join the session</div>
   </div>
   <div class="card"><div class="card-bd" id="vv-body">
-    <div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Đang tải…</div>
+    <div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Loading…</div>
   </div></div>
   <div style="text-align:center;margin-top:16px">
-    <span onclick="adminLogin()" style="font-size:11px;color:var(--hint);cursor:pointer">Quản trị viên</span>
+    <span onclick="adminLogin()" style="font-size:11px;color:var(--hint);cursor:pointer">Admin</span>
   </div>
 </div>
 
