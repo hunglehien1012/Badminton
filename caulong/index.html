@@ -252,12 +252,26 @@
   </div>
 </div>
 
+<!-- ══════════════ MODAL: CHỌN OPTIONS (VOTE) ══════════════ -->
+<div class="modal-backdrop" id="modal-voter-select">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title">Select your options</span>
+      <button class="btn-icon" onclick="closeVoterSelectModal()" style="font-size:20px">×</button>
+    </div>
+    <div class="modal-bd" id="vv-modal-body"></div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" id="vv-modal-cancel-btn" onclick="closeVoterSelectModal()">Cancel</button>
+      <button class="btn btn-primary" id="vv-modal-submit-btn" onclick="confirmVote()">Submit</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════ PLAYER VOTE PAGE ══════════════ -->
 <div id="voter-view">
   <div style="text-align:center;padding:18px 0 14px">
     <div style="font-size:34px">🏸</div>
     <div style="font-size:17px;font-weight:700;margin-top:4px">Badminton Club</div>
-    <div style="font-size:12px;color:var(--muted)">Vote to join the session</div>
   </div>
   <div class="card"><div class="card-bd" id="vv-body">
     <div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Loading…</div>
