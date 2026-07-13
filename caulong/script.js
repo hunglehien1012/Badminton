@@ -1750,6 +1750,16 @@ function updatePollOptionField(oid, field, value) {
   if (o) o[field] = value;
 }
 
+// Members can now select MULTIPLE options per poll (e.g. "Join" + "+2").
+// Votes are stored as `choices: [optionId, ...]`. Older votes saved before this
+// feature used a single `choice: optionId` string — this reads both formats.
+function voteChoices(v) {
+  if (!v) return [];
+  if (Array.isArray(v.choices)) return v.choices;
+  if (v.choice) return [v.choice];
+  return [];
+}
+
 async function removePollOption(oid) {
   if (tempPollOptions.length <= 1) return;
   // Warn if people already voted for this option on the poll being edited
@@ -1757,7 +1767,8 @@ async function removePollOption(oid) {
     const p = pollsCache[editingPollId];
     const voteCount =
       p && p.votes
-        ? Object.values(p.votes).filter((v) => v.choice === oid).length
+        ? Object.values(p.votes).filter((v) => voteChoices(v).includes(oid))
+            .length
         : 0;
     if (voteCount > 0) {
       const ok = await showConfirm({
@@ -1970,7 +1981,7 @@ function pollVotesByOption(p) {
     ...o,
     tone: optColor(i),
     votes: votes
-      .filter((v) => v.choice === o.id)
+      .filter((v) => voteChoices(v).includes(o.id))
       .sort((a, b) => (a.at || 0) - (b.at || 0)),
   }));
 }
@@ -1978,12 +1989,8 @@ function pollVotesByOption(p) {
 function pollVotesFor(p, optionId) {
   const votes = p.votes ? Object.values(p.votes) : [];
   return votes
-    .filter((v) => v.choice === optionId)
+    .filter((v) => voteChoices(v).includes(optionId))
     .sort((a, b) => (a.at || 0) - (b.at || 0));
-}
-
-function optDot(tone) {
-  return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${tone.solid};margin-right:5px;flex-shrink:0"></span>`;
 }
 
 function renderPollList() {
@@ -2004,10 +2011,7 @@ function renderPollList() {
       const open = p.status === "open";
       const exp = pollExpanded[pid];
       const summary = groups
-        .map(
-          (g) =>
-            `<span style="display:inline-flex;align-items:center">${optDot(g.tone)}${g.votes.length}</span>`,
-        )
+        .map((g) => `${g.label}: ${g.votes.length}`)
         .join(" &nbsp;·&nbsp; ");
       let detail = "";
       if (exp) {
@@ -2015,8 +2019,8 @@ function renderPollList() {
         ${groups
           .map(
             (g) => `
-          <div style="display:flex;align-items:center;font-size:11px;font-weight:600;color:${g.tone.text};margin:8px 0 4px">${optDot(g.tone)}${esc(g.label)} (${g.votes.length})</div>
-          <div>${g.votes.length ? g.votes.map((v) => `<span class="vote-chip" style="background:${g.tone.bg};border-color:${g.tone.border};color:${g.tone.text}">${esc(v.name)}</span>`).join("") : '<span style="font-size:12px;color:var(--hint)">No one yet</span>'}</div>`,
+          <div style="font-size:11px;font-weight:600;color:${g.tone.text};margin:8px 0 4px">${esc(g.label)} (${g.votes.length})</div>
+          <div>${g.votes.length ? g.votes.map((v) => `<span class="vote-chip" style="background:${g.tone.bg};border-color:${g.tone.border};color:${g.tone.text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("") : '<span style="font-size:12px;color:var(--hint)">No one yet</span>'}</div>`,
           )
           .join("")}
       </div>`;
@@ -2046,6 +2050,13 @@ function renderPollList() {
 
 // Create a new session from vote results: everyone who voted for the "Join"
 // option (✅) is added and pre-ticked in the cost split.
+// Options labelled "+1", "+2", "+3"... mean "bringing N extra guests".
+// Returns N (0 if the label doesn't match that pattern).
+function extraGuestCount(label) {
+  const m = /^\+\s*(\d+)$/.exec((label || "").trim());
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 function createSessionFromPoll(pid) {
   const p = pollsCache[pid];
   if (!p) return;
@@ -2064,6 +2075,25 @@ function createSessionFromPoll(pid) {
     }
     votedIds.add(m.id);
   });
+  // Members who selected a "+N" option are bringing N extra guests — add one
+  // casual member per guest (named after the voter) so the cost split accounts for them.
+  const pOptions = pollOptions(p);
+  const allVotes = p.votes ? Object.values(p.votes) : [];
+  allVotes.forEach((v) => {
+    voteChoices(v).forEach((cid) => {
+      const opt = pOptions.find((o) => o.id === cid);
+      const n = opt ? extraGuestCount(opt.label) : 0;
+      for (let i = 1; i <= n; i++) {
+        const guestName = `${v.name.trim()} +${i}`;
+        let gm = members.find((mm) => nameKey(mm.name) === nameKey(guestName));
+        if (!gm) {
+          gm = { id: uid(), name: guestName, type: "casual" };
+          members.push(gm);
+        }
+        votedIds.add(gm.id);
+      }
+    });
+  });
   ss("hl_members", members);
   editingSessionId = null;
   document.getElementById("modal-session-title").textContent =
@@ -2072,7 +2102,7 @@ function createSessionFromPoll(pid) {
   document.getElementById("ms-date").value =
     p.date || new Date().toISOString().slice(0, 10);
   document.getElementById("ms-note").value = p.note || "Saturday";
-  // Only pre-tick members who actually voted ✅ Join (including Fixed) — no one else added automatically
+  // Only pre-tick members who actually voted ✅ Join (including Fixed) plus their +N guests — no one else added automatically
   tempMembers = members.map((m) => ({
     ...m,
     included: votedIds.has(m.id),
@@ -2393,7 +2423,20 @@ async function adminLogin() {
 function avatarStack(arr, tone) {
   const shown = arr.slice(0, 3);
   const more = arr.length - shown.length;
-  return `<span class="av-stack">${shown.map((v) => `<span class="av" style="background:${tone.solid}">${esc(initials(v.name))}</span>`).join("")}${more > 0 ? `<span class="av more">+${more}</span>` : ""}</span>`;
+  return `<span class="av-stack">${shown
+    .map((v) =>
+      v.avatar
+        ? `<span class="av" style="padding:0;overflow:hidden"><img src="${v.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></span>`
+        : `<span class="av" style="background:${tone.solid}">${esc(initials(v.name))}</span>`,
+    )
+    .join("")}${more > 0 ? `<span class="av more">+${more}</span>` : ""}</span>`;
+}
+
+// Small 16px avatar image shown before a name in vote-chip pills, when the voter has one set
+function chipAvatarImg(v) {
+  return v.avatar
+    ? `<img src="${v.avatar}" alt="" style="width:16px;height:16px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:4px">`
+    : "";
 }
 
 function toggleVvList(oid) {
@@ -2402,19 +2445,19 @@ function toggleVvList(oid) {
   renderVoterView();
 }
 
-function fbOptRow(group, myVote, open) {
+function fbOptRow(group, myChoices, open) {
   const { id, label, votes, tone } = group;
-  const sel = myVote === id;
+  const sel = myChoices.includes(id);
   const expanded = vvExpanded.has(id);
-  return `<div class="fb-opt ${sel ? "sel" : ""} ${open ? "" : "disabled"}" onclick="${open ? `castVote('${id}')` : ""}">
+  return `<div class="fb-opt ${sel ? "sel" : ""} ${open ? "" : "disabled"}" onclick="${open ? `toggleVote('${id}')` : ""}">
       <span class="fb-check">${sel ? "✓" : ""}</span>
-      <div style="flex:1;font-size:15px;font-weight:500;display:flex;align-items:center">${optDot(tone)}${esc(label)}</div>
+      <div style="flex:1;font-size:15px;font-weight:500">${esc(label)}</div>
       <div onclick="event.stopPropagation();toggleVvList('${id}')" style="display:flex;align-items:center;gap:7px;padding:2px 4px">
         ${votes.length ? avatarStack(votes, tone) : ""}
         <span style="font-size:13px;color:var(--muted);font-weight:600">${votes.length}</span>
       </div>
     </div>
-    ${expanded && votes.length ? `<div class="fb-opt-names">${votes.map((v) => `<span class="vote-chip" style="background:${tone.bg};border-color:${tone.border};color:${tone.text}">${esc(v.name)}</span>`).join("")}</div>` : ""}`;
+    ${expanded && votes.length ? `<div class="fb-opt-names">${votes.map((v) => `<span class="vote-chip" style="background:${tone.bg};border-color:${tone.border};color:${tone.text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("")}</div>` : ""}`;
 }
 
 function renderVoterView() {
@@ -2435,23 +2478,33 @@ function renderVoterView() {
     (p.votes && p.votes[myDevId]) ||
     (legacyKey && p.votes && p.votes[legacyKey]) ||
     null;
-  const myVote = myVoteEntry ? myVoteEntry.choice : null;
+  const myChoices = voteChoices(myVoteEntry);
+  const myAvatar =
+    (myVoteEntry && myVoteEntry.avatar) || ls("hl_voter_avatar") || null;
   const groups = pollVotesByOption(p);
   const title = p.note || "Badminton Session";
+  const avatarPreview = myAvatar
+    ? `<img src="${myAvatar}" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0">`
+    : `<div style="width:34px;height:34px;border-radius:50%;background:var(--bg);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0">${esc(initials(lockedName || "?"))}</div>`;
   const nameBox = lockedName
     ? `<div class="vv-name-box">
         <label class="field-label">Voting as</label>
         <div style="display:flex;align-items:center;gap:10px;border:1.5px solid var(--border);border-radius:12px;padding:12px 14px">
-          <span style="font-size:15px;font-weight:600;flex:1">👤 ${esc(lockedName)}</span>
+          <div onclick="pickVoterAvatar()" style="position:relative;cursor:pointer;flex-shrink:0" title="Add/change your photo (optional)">
+            ${avatarPreview}
+            <span style="position:absolute;bottom:-2px;right:-2px;background:var(--surface);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1">📷</span>
+          </div>
+          <span style="font-size:15px;font-weight:600;flex:1">${esc(lockedName)}</span>
           <span onclick="resetVoterName()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">Not you?</span>
         </div>
+        ${myAvatar ? `<div style="text-align:right;margin-top:4px"><span onclick="removeVoterAvatar()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">Remove photo</span></div>` : ""}
       </div>`
     : `<div class="vv-name-box">
         <label class="field-label">Your name <span style="color:var(--coral-m)">*</span></label>
         <input type="text" id="vv-name" placeholder="Enter your full name…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()">
         <div style="font-size:11px;color:var(--muted);margin-top:5px">⚠️ After your first vote, this name will be locked to this device to prevent voting on someone else's behalf.</div>
       </div>`;
-  const myGroup = groups.find((g) => g.id === myVote);
+  const myGroups = groups.filter((g) => myChoices.includes(g.id));
   const addOptionBox = open
     ? `<div style="display:flex;gap:6px;margin-top:10px">
         <input type="text" id="vv-new-option" placeholder="Suggest another option…" maxlength="30" style="flex:1"
@@ -2467,9 +2520,10 @@ function renderVoterView() {
       </div>
     </div>
     ${nameBox}
-    ${groups.map((g) => fbOptRow(g, myVote, open)).join("")}
+    <div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">You can select more than one option (e.g. "Join" + "+2").</div>
+    ${groups.map((g) => fbOptRow(g, myChoices, open)).join("")}
     ${addOptionBox}
-    <div id="vv-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:6px">${myVote ? "You voted: " + (myGroup ? esc(myGroup.label) : "—") + " — tap another option to change" : open ? (lockedName ? "Tap an option to vote" : "") : ""}</div>`;
+    <div id="vv-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:6px">${myGroups.length ? "You voted: " + myGroups.map((g) => esc(g.label)).join(", ") + " — tap to change" : open ? (lockedName ? "Tap the options that apply to you" : "") : ""}</div>`;
 }
 
 // Members can suggest a new vote option from the public vote page itself,
@@ -2530,7 +2584,9 @@ async function resetVoterName() {
   renderVoterView();
 }
 
-function castVote(choice) {
+// Toggles one option on/off in this device's vote for the current poll —
+// members can now have multiple options selected at once (e.g. "Join" + "+2").
+function toggleVote(optionId) {
   if (!voterPoll || voterPoll.status !== "open") {
     showToast("This vote is closed");
     return;
@@ -2547,14 +2603,30 @@ function castVote(choice) {
     // Lock the name to this device on first vote — prevents voting on someone else's behalf
     ss("hl_voter_locked_name", name);
   }
+  const devId = getDeviceId();
+  const existing = (voterPoll.votes && voterPoll.votes[devId]) || null;
+  const current = voteChoices(existing);
+  const choices = current.includes(optionId)
+    ? current.filter((c) => c !== optionId)
+    : [...current, optionId];
+  // Keep whatever avatar is already on this vote entry; if none yet, fall back to
+  // whatever photo this device last uploaded on any poll (avoids re-uploading every time).
+  const avatar = (existing && existing.avatar) || ls("hl_voter_avatar") || null;
   // Votes are keyed by deviceId (fixed, doesn't change when the name is changed) →
-  // each device only ever has 1 vote per poll, no matter how many times "Not you?" is used.
+  // each device only ever has 1 vote record per poll, no matter how many times "Not you?" is used.
   fdb
-    .ref("polls/" + voterPid + "/votes/" + getDeviceId())
-    .set({ name, choice, at: Date.now(), nameKey: nameKey(name) })
+    .ref("polls/" + voterPid + "/votes/" + devId)
+    .set({ name, choices, at: Date.now(), nameKey: nameKey(name), avatar })
     .then(() => {
-      const opt = pollOptions(voterPoll).find((o) => o.id === choice);
-      showToast(opt ? `Voted: ${opt.label}` : "Vote saved");
+      const opt = pollOptions(voterPoll).find((o) => o.id === optionId);
+      const added = choices.includes(optionId);
+      showToast(
+        opt
+          ? `${added ? "Voted" : "Removed"}: ${opt.label}`
+          : added
+            ? "Vote saved"
+            : "Vote removed",
+      );
       renderVoterView();
     })
     .catch((err) => {
@@ -2563,6 +2635,89 @@ function castVote(choice) {
         "Error: " + (err && err.message ? err.message : "couldn't connect"),
       );
     });
+}
+
+// ─── OPTIONAL VOTER AVATAR (shown next to their name/votes) ──────
+// Resizes+compresses the picked image client-side to a small square JPEG so it
+// stays lightweight in the Firebase Realtime Database (no separate Storage needed).
+function compressImageFile(file, maxDim = 128, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    if (!file.type || !file.type.startsWith("image/")) {
+      reject(new Error("Please choose an image file"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Couldn't read that file"));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Couldn't read that image"));
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = maxDim;
+        canvas.height = maxDim;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, maxDim, maxDim);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function pickVoterAvatar() {
+  const inp = document.getElementById("vv-avatar-input");
+  if (inp) inp.click();
+}
+
+async function onVoterAvatarSelected(inputEl) {
+  const file = inputEl.files && inputEl.files[0];
+  inputEl.value = ""; // reset so picking the same file again still fires change
+  if (!file) return;
+  try {
+    const dataUrl = await compressImageFile(file, 128, 0.7);
+    if (dataUrl.length > 150000) {
+      showToast("That photo is too large — try a simpler/smaller image");
+      return;
+    }
+    ss("hl_voter_avatar", dataUrl); // cached locally so future polls reuse it automatically
+    const lockedName = (ls("hl_voter_locked_name") || "").trim();
+    if (voterPid && fbReady() && lockedName) {
+      const devId = getDeviceId();
+      const existing = (voterPoll && voterPoll.votes && voterPoll.votes[devId]) || null;
+      await fdb.ref("polls/" + voterPid + "/votes/" + devId).set({
+        name: lockedName,
+        choices: voteChoices(existing),
+        at: existing ? existing.at || Date.now() : Date.now(),
+        nameKey: nameKey(lockedName),
+        avatar: dataUrl,
+      });
+    }
+    showToast("📸 Photo updated");
+    renderVoterView();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Couldn't process that photo");
+  }
+}
+
+async function removeVoterAvatar() {
+  try {
+    localStorage.removeItem("hl_voter_avatar");
+  } catch {}
+  const lockedName = (ls("hl_voter_locked_name") || "").trim();
+  if (voterPid && fbReady() && lockedName) {
+    const devId = getDeviceId();
+    const existing = (voterPoll && voterPoll.votes && voterPoll.votes[devId]) || null;
+    if (existing) {
+      await fdb.ref("polls/" + voterPid + "/votes/" + devId + "/avatar").remove();
+    }
+  }
+  showToast("Photo removed");
+  renderVoterView();
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────
