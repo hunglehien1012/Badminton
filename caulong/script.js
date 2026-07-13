@@ -55,6 +55,25 @@ function nameKey(s) {
       .replace(/^_+|_+$/g, "") || "x"
   );
 }
+// Danh sách tên/chuỗi bị chặn khi vote — chuẩn hóa (bỏ dấu, chữ thường, bỏ
+// khoảng trắng) trước khi so khớp, để bắt được cả biến thể cách chữ ra
+// ("n u r u") lẫn có dấu ("Nauy"). Bất kỳ tên nào chứa số 7 (ở bất kỳ vị trí
+// nào, kể cả xen giữa như "007") hoặc chữ "bảy" cũng bị chặn.
+const BLOCKED_NAME_SUBSTRINGS = ["nuru", "brian", "nauy"];
+function normalizeForNameBlockCheck(s) {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+function isNameBlocked(rawName) {
+  const norm = normalizeForNameBlockCheck(rawName);
+  if (!norm) return false;
+  if (/7/.test(norm)) return true;
+  return BLOCKED_NAME_SUBSTRINGS.some((sub) => norm.includes(sub));
+}
 // ID cố định cho thiết bị này, tạo 1 lần duy nhất và KHÔNG bị xóa khi đổi tên vote.
 // Dùng làm key lưu vote trong Firebase → 1 thiết bị chỉ có đúng 1 slot vote / cuộc vote,
 // dù người dùng bấm "Không phải bạn?" và đổi tên bao nhiêu lần cũng chỉ ghi đè lên slot đó
@@ -2151,6 +2170,102 @@ function initVoterView(pid) {
 }
 
 let vvExpanded = new Set();
+let vvLogExpanded = false;
+let vvLogSearch = "";
+let vvLogVisibleCount = 5; // how many activity entries are currently shown — grows by 5 as the user scrolls
+
+// ─── ACTIVITY LOG (visible to every member, not just admin) ──────
+// Every vote toggle / name change / new-option suggestion gets pushed here so
+// anyone with the vote link can see who changed what and when, searchable by name.
+function pollLogs(p) {
+  const logs = p && p.logs ? Object.values(p.logs) : [];
+  return logs.sort((a, b) => (b.at || 0) - (a.at || 0));
+}
+function logVoteEvent(pid, name, action) {
+  if (!fbReady() || !pid) return;
+  fdb
+    .ref("polls/" + pid + "/logs")
+    .push()
+    .set({ name: name || "Someone", action, at: Date.now() })
+    .catch((err) => console.error("Log write failed", err));
+}
+function formatLogTime(ts) {
+  if (!ts) return "";
+  return new Date(ts).toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+function renderLogListHtml(logs, search) {
+  const q = (search || "").trim().toLowerCase();
+  const filtered = q
+    ? logs.filter((l) => (l.name || "").toLowerCase().includes(q))
+    : logs;
+  if (filtered.length === 0) {
+    return '<div style="font-size:12px;color:var(--hint);text-align:center;padding:8px 0">No activity yet.</div>';
+  }
+  const visible = filtered.slice(0, vvLogVisibleCount);
+  let html = visible
+    .map(
+      (l) => `
+    <div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="font-weight:600">${esc(l.name || "Someone")}</span> ${esc(l.action || "")}
+      <div style="color:var(--hint);font-size:10px;margin-top:1px">${formatLogTime(l.at)}</div>
+    </div>`,
+    )
+    .join("");
+  if (visible.length < filtered.length) {
+    html += `<div style="text-align:center;padding:6px 0"><span onclick="event.stopPropagation();loadMoreActivity()" style="font-size:11px;color:var(--hint);text-decoration:underline;cursor:pointer">Load more</span></div>`;
+  }
+  return html;
+}
+function toggleVoteLog() {
+  vvLogExpanded = !vvLogExpanded;
+  if (vvLogExpanded) vvLogVisibleCount = 5;
+  renderVoterView();
+}
+function filterVoteLog(value) {
+  vvLogSearch = value;
+  vvLogVisibleCount = 5;
+  const listEl = document.getElementById("vv-log-list");
+  if (listEl)
+    listEl.innerHTML = renderLogListHtml(pollLogs(voterPoll), vvLogSearch);
+}
+// Explicit "Load more" trigger — the reliable way to reveal 5 more entries.
+// (Scroll-to-bottom alone isn't enough here: with only 5 entries the box
+// often isn't tall enough to actually produce a scrollbar, so a scroll event
+// never fires and nothing loads. The button always works regardless.)
+function loadMoreActivity() {
+  const q = (vvLogSearch || "").trim().toLowerCase();
+  const logs = pollLogs(voterPoll);
+  const filtered = q
+    ? logs.filter((l) => (l.name || "").toLowerCase().includes(q))
+    : logs;
+  if (vvLogVisibleCount >= filtered.length) return;
+  vvLogVisibleCount += 5;
+  const listEl = document.getElementById("vv-log-list");
+  if (listEl) listEl.innerHTML = renderLogListHtml(logs, vvLogSearch);
+}
+// Infinite-scroll: also reveals 5 more entries once the user scrolls near the
+// bottom of the activity list, for the case where there are enough entries to
+// actually make the box scrollable. Preserves scroll position on re-render.
+function handleActivityScroll(el) {
+  if (el.scrollTop + el.clientHeight < el.scrollHeight - 20) return;
+  const q = (vvLogSearch || "").trim().toLowerCase();
+  const logs = pollLogs(voterPoll);
+  const filtered = q
+    ? logs.filter((l) => (l.name || "").toLowerCase().includes(q))
+    : logs;
+  if (vvLogVisibleCount >= filtered.length) return;
+  vvLogVisibleCount += 5;
+  const scrollPos = el.scrollTop;
+  el.innerHTML = renderLogListHtml(logs, vvLogSearch);
+  el.scrollTop = scrollPos;
+}
+
 const migratedLegacyVotePolls = new Set();
 
 // Legacy data migration (before switching to deviceId-based vote keys): if this
@@ -2469,20 +2584,115 @@ function renderVoterView() {
   }
   const p = voterPoll;
   const open = p.status === "open";
-  const lockedName = (ls("hl_voter_locked_name") || "").trim();
-  const curInput = document.getElementById("vv-name");
-  const nameVal = lockedName ? lockedName : curInput ? curInput.value : ""; // keep what's being typed on realtime re-render
-  const myDevId = getDeviceId();
-  const legacyKey = nameVal.trim() ? nameKey(nameVal) : null;
-  const myVoteEntry =
-    (p.votes && p.votes[myDevId]) ||
-    (legacyKey && p.votes && p.votes[legacyKey]) ||
-    null;
-  const myChoices = voteChoices(myVoteEntry);
-  const myAvatar =
-    (myVoteEntry && myVoteEntry.avatar) || ls("hl_voter_avatar") || null;
+  const myVoteEntry = getMyVoteEntry();
+  const committedChoices = voteChoices(myVoteEntry);
+  ensurePendingChoices(voterPid, committedChoices);
   const groups = pollVotesByOption(p);
   const title = p.note || "Badminton Session";
+  // Scale each option's progress bar against the club's member count at the time
+  // the poll was created (falls back to the highest vote count for old polls
+  // that predate that snapshot, so the bar chart still makes sense).
+  const totalMembers =
+    Array.isArray(p.memberNames) && p.memberNames.length
+      ? p.memberNames.length
+      : Math.max(1, ...groups.map((g) => g.votes.length), 1);
+  const summaryRows = groups
+    .map((g) => fbOptSummaryRow(g, totalMembers))
+    .join("");
+  const changeBtnLabel = committedChoices.length ? "Change vote" : "Vote";
+  const changeBtn = open
+    ? `<button onclick="openVoterSelectModal()" style="width:100%;justify-content:center;margin-top:4px;font-weight:700;font-size:15px;padding:14px;border-radius:14px;border:none;background:var(--bg);color:var(--text);cursor:pointer;font-family:inherit">${changeBtnLabel}</button>`
+    : "";
+  const logs = pollLogs(p);
+  const logSection = `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div onclick="toggleVoteLog()" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer">
+        <span style="font-size:13px;font-weight:600">Activity <span style="color:var(--muted);font-weight:400">(${logs.length})</span></span>
+        <span style="font-size:11px;color:var(--hint)">${vvLogExpanded ? "Hide ▲" : "Show ▼"}</span>
+      </div>
+      ${
+        vvLogExpanded
+          ? `<div style="margin-top:8px">
+              <input type="text" placeholder="Search by name…" value="${esc(vvLogSearch)}" oninput="filterVoteLog(this.value)" style="margin-bottom:8px">
+              <div id="vv-log-list" onscroll="handleActivityScroll(this)" style="max-height:260px;overflow-y:auto">${renderLogListHtml(logs, vvLogSearch)}</div>
+            </div>`
+          : ""
+      }
+    </div>`;
+  body.innerHTML = `
+    <div style="position:relative;text-align:center;margin-bottom:14px">
+      <span class="badge-pill ${open ? "badge-green" : "badge-coral"}" style="position:absolute;top:0;right:0">${open ? "🟢 Open" : "🔒 Closed"}</span>
+      <div style="font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(title)}</div>
+      <div style="font-size:16px;font-weight:600;color:var(--muted);margin-top:4px">${esc(fmtDate(p.date))}</div>
+    </div>
+    ${summaryRows}
+    ${changeBtn}
+    ${logSection}`;
+  // Keep the select-options modal in sync too, if it happens to be open
+  // (e.g. a realtime update comes in while the member is still picking).
+  const modalEl = document.getElementById("modal-voter-select");
+  if (modalEl && modalEl.classList.contains("open")) renderVoterSelectModal();
+}
+
+// Read-only summary row shown on the main vote page: label, who-voted avatars,
+// and a progress bar sized against the club's member count. Tapping it expands
+// the full list of names (same as before) — but no longer casts a vote itself;
+// voting now happens inside the "Select your options" modal via Change vote.
+function fbOptSummaryRow(group, totalMembers) {
+  const { id, label, votes, tone } = group;
+  const expanded = vvExpanded.has(id);
+  const pct =
+    totalMembers > 0 ? Math.min(100, Math.round((votes.length / totalMembers) * 100)) : 0;
+  return `<div style="margin-bottom:16px;cursor:pointer" onclick="toggleVvList('${id}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:16px;font-weight:600">${esc(label)}</div>
+        <div style="display:flex;align-items:center;gap:7px">
+          ${votes.length ? avatarStack(votes, tone) : ""}
+        </div>
+      </div>
+      <div style="height:8px;border-radius:5px;background:var(--border);overflow:hidden">
+        <div style="height:100%;border-radius:5px;width:${pct}%;background:var(--blue)"></div>
+      </div>
+      ${expanded && votes.length ? `<div class="fb-opt-names" style="margin-top:8px">${votes.map((v) => `<span class="vote-chip" style="background:${tone.bg};border-color:${tone.border};color:${tone.text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("")}</div>` : ""}
+    </div>`;
+}
+
+// ─── "SELECT YOUR OPTIONS" MODAL ──────────────────────────────────
+// Voting now happens here instead of directly on the summary page: tap
+// "Change vote" to open this, pick options (checkmarks toggle a LOCAL
+// pending selection only), then tap Submit to actually save it.
+function openVoterSelectModal() {
+  if (!voterPoll) return;
+  if (voterPoll.status !== "open") {
+    showToast("This vote is closed");
+    return;
+  }
+  ensurePendingChoices(voterPid, voteChoices(getMyVoteEntry()));
+  renderVoterSelectModal();
+  openModal("modal-voter-select");
+}
+function closeVoterSelectModal() {
+  if (voteDelayActive) {
+    showToast("Please wait — your submission is still being applied…");
+    return;
+  }
+  // Discard any un-submitted taps made inside the modal
+  vvPendingChoices = new Set(voteChoices(getMyVoteEntry()));
+  closeModal("modal-voter-select");
+}
+function renderVoterSelectModal() {
+  if (!voterPoll) return;
+  const p = voterPoll;
+  const open = p.status === "open";
+  const lockedName = (ls("hl_voter_locked_name") || "").trim();
+  const curInput = document.getElementById("vv-name");
+  const nameVal = lockedName ? lockedName : curInput ? curInput.value : "";
+  const myVoteEntry = getMyVoteEntry();
+  const myAvatar =
+    (myVoteEntry && myVoteEntry.avatar) || ls("hl_voter_avatar") || null;
+  ensurePendingChoices(voterPid, voteChoices(myVoteEntry));
+  const myChoices = Array.from(vvPendingChoices);
+  const groups = pollVotesByOption(p);
   const avatarPreview = myAvatar
     ? `<img src="${myAvatar}" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex-shrink:0">`
     : `<div style="width:34px;height:34px;border-radius:50%;background:var(--bg);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0">${esc(initials(lockedName || "?"))}</div>`;
@@ -2502,9 +2712,7 @@ function renderVoterView() {
     : `<div class="vv-name-box">
         <label class="field-label">Your name <span style="color:var(--coral-m)">*</span></label>
         <input type="text" id="vv-name" placeholder="Enter your full name…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()">
-        <div style="font-size:11px;color:var(--muted);margin-top:5px">⚠️ After your first vote, this name will be locked to this device to prevent voting on someone else's behalf.</div>
       </div>`;
-  const myGroups = groups.filter((g) => myChoices.includes(g.id));
   const addOptionBox = open
     ? `<div style="display:flex;gap:6px;margin-top:10px">
         <input type="text" id="vv-new-option" placeholder="Suggest another option…" maxlength="30" style="flex:1"
@@ -2512,18 +2720,28 @@ function renderVoterView() {
         <button class="btn btn-ghost btn-sm" onclick="addVoterOption()" style="white-space:nowrap">+ Add option</button>
       </div>`
     : "";
-  body.innerHTML = `
-    <div style="text-align:center;margin-bottom:14px">
-      <div style="font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(title)}</div>
-      <div style="font-size:16px;font-weight:600;color:var(--muted);margin-top:4px">${esc(fmtDate(p.date))}
-        &nbsp;<span class="badge-pill ${open ? "badge-green" : "badge-coral"}" style="vertical-align:middle">${open ? "🟢 Open" : "🔒 Closed"}</span>
-      </div>
-    </div>
-    ${nameBox}
-    <div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">You can select more than one option (e.g. "Join" + "+2").</div>
-    ${groups.map((g) => fbOptRow(g, myChoices, open)).join("")}
-    ${addOptionBox}
-    <div id="vv-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:6px">${myGroups.length ? "You voted: " + myGroups.map((g) => esc(g.label)).join(", ") + " — tap to change" : open ? (lockedName ? "Tap the options that apply to you" : "") : ""}</div>`;
+  const modalBody = document.getElementById("vv-modal-body");
+  if (modalBody) {
+    modalBody.innerHTML = `
+      ${nameBox}
+      ${groups.map((g) => fbOptRow(g, myChoices, open)).join("")}
+      ${addOptionBox}
+      <div style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px">${open ? "" : "This vote is closed"}</div>
+    `;
+  }
+  const remainingDelay =
+    voteDelayActive && voteDelayEndsAt
+      ? Math.max(0, Math.ceil((voteDelayEndsAt - Date.now()) / 1000))
+      : 0;
+  const submitBtn = document.getElementById("vv-modal-submit-btn");
+  const cancelBtn = document.getElementById("vv-modal-cancel-btn");
+  if (submitBtn) {
+    submitBtn.disabled = voteDelayActive || !open;
+    submitBtn.textContent = voteDelayActive
+      ? `⏳ Applying in ${remainingDelay}s…`
+      : "Submit";
+  }
+  if (cancelBtn) cancelBtn.disabled = voteDelayActive;
 }
 
 // Members can suggest a new vote option from the public vote page itself,
@@ -2553,6 +2771,7 @@ function addVoterOption() {
     .then(() => {
       if (inp) inp.value = "";
       showToast("Option added ✅");
+      logVoteEvent(voterPid, lockedName || "Someone", `added new option "${label}"`);
     })
     .catch((err) => {
       console.error(err);
@@ -2571,21 +2790,94 @@ async function resetVoterName() {
     !(await showConfirm({
       title: "Change vote name?",
       tone: "info",
-      message:
-        "This device's current vote will be updated to the new name (no extra vote is created) — only use this if the name was entered by mistake, not to vote on someone else's behalf.",
+      message: "This device's current vote will be updated to the new name.",
       yesText: "Change name",
       noText: "Cancel",
     }))
   )
     return;
+  const newName = await showPrompt({
+    title: "Change vote name",
+    label: "New name",
+    placeholder: "Enter your full name…",
+    confirmText: "Save",
+  });
+  if (newName === null) return;
+  const trimmed = newName.trim();
+  if (!trimmed) {
+    showToast("Please enter your name");
+    return;
+  }
+  if (isNameBlocked(trimmed)) {
+    showToast("Invalid name");
+    return;
+  }
   try {
-    localStorage.removeItem("hl_voter_locked_name");
+    ss("hl_voter_locked_name", trimmed);
   } catch {}
-  renderVoterView();
+  // Update the name directly on this device's existing vote entry (if any) —
+  // no need to reselect options or submit again, the choices stay as-is.
+  const devId = getDeviceId();
+  const existing = voterPoll && voterPoll.votes && voterPoll.votes[devId];
+  if (existing && voterPid && fdb) {
+    fdb
+      .ref("polls/" + voterPid + "/votes/" + devId)
+      .update({ name: trimmed, nameKey: nameKey(trimmed) })
+      .then(() => {
+        showToast("Name updated");
+        renderVoterView();
+      })
+      .catch((err) => {
+        showToast(
+          "Error: " + (err && err.message ? err.message : "couldn't connect"),
+        );
+      });
+  } else {
+    renderVoterView();
+  }
 }
 
-// Toggles one option on/off in this device's vote for the current poll —
-// members can now have multiple options selected at once (e.g. "Join" + "+2").
+// Tapping an option only changes the LOCAL pending selection — nothing is
+// written to Firebase until the member taps "Confirm selection". This avoids
+// a network write (and a throttle "attempt") per tap, and lets people freely
+// change their mind before locking it in.
+//
+// Anti-spam throttle: each device gets 4 free CONFIRM taps per poll. From the
+// 5th confirm onward, it's queued and applied after a growing delay — 10s on
+// the 5th, 20s on the 6th, 30s on the 7th, and so on — instead of firing
+// immediately. This is a best-effort client-side limit (not server-enforced).
+let voteDelayActive = false;
+let voteDelayEndsAt = null; // timestamp the current delay finishes, else null
+let voteDelayTimer = null; // interval id driving the live countdown in the UI
+let vvPendingChoices = null; // Set of optionIds selected locally but not yet confirmed
+let vvPendingBasePid = null; // which poll vvPendingChoices belongs to
+function voteAttemptKey(pid) {
+  return "hl_vote_attempts_" + pid;
+}
+// Returns this device's own vote entry from the (realtime) poll data.
+function getMyVoteEntry() {
+  if (!voterPoll) return null;
+  const lockedName = (ls("hl_voter_locked_name") || "").trim();
+  const curInput = document.getElementById("vv-name");
+  const nameVal = lockedName ? lockedName : curInput ? curInput.value : "";
+  const myDevId = getDeviceId();
+  const legacyKey = nameVal.trim() ? nameKey(nameVal) : null;
+  return (
+    (voterPoll.votes && voterPoll.votes[myDevId]) ||
+    (legacyKey && voterPoll.votes && voterPoll.votes[legacyKey]) ||
+    null
+  );
+}
+// (Re)seeds the pending-selection state from the committed server vote —
+// only when we don't have one yet, or we've switched to a different poll.
+// This is what lets vvPendingChoices survive realtime re-renders while the
+// member is still deciding, without ever clobbering an in-progress edit.
+function ensurePendingChoices(pid, committed) {
+  if (vvPendingBasePid !== pid || vvPendingChoices === null) {
+    vvPendingChoices = new Set(committed);
+    vvPendingBasePid = pid;
+  }
+}
 function toggleVote(optionId) {
   if (!voterPoll || voterPoll.status !== "open") {
     showToast("This vote is closed");
@@ -2600,15 +2892,81 @@ function toggleVote(optionId) {
       showToast("Please enter your name before voting");
       return;
     }
-    // Lock the name to this device on first vote — prevents voting on someone else's behalf
+    if (isNameBlocked(name)) {
+      showToast("Invalid name");
+      return;
+    }
+    // Lock the name to this device on first tap — prevents voting on someone else's behalf
     ss("hl_voter_locked_name", name);
   }
+  ensurePendingChoices(voterPid, voteChoices(getMyVoteEntry()));
+  if (vvPendingChoices.has(optionId)) vvPendingChoices.delete(optionId);
+  else vvPendingChoices.add(optionId);
+  renderVoterSelectModal();
+}
+// Locks in the pending selection — this is the actual "vote attempt" that
+// counts toward the 4-free / growing-delay throttle.
+function confirmVote() {
+  if (!voterPoll || voterPoll.status !== "open") {
+    showToast("This vote is closed");
+    return;
+  }
+  if (voteDelayActive) {
+    showToast("Please wait — your previous confirmation is still being applied…");
+    return;
+  }
+  if (!vvPendingChoices) return;
+  const lockedName = (ls("hl_voter_locked_name") || "").trim();
+  let name = lockedName;
+  if (!name) {
+    const inp = document.getElementById("vv-name");
+    name = inp ? inp.value.trim() : "";
+    if (!name) {
+      showToast("Please enter your name before voting");
+      return;
+    }
+    if (isNameBlocked(name)) {
+      showToast("Invalid name");
+      return;
+    }
+    ss("hl_voter_locked_name", name);
+  }
+  const choices = Array.from(vvPendingChoices);
+  const key = voteAttemptKey(voterPid);
+  const attempt = (ls(key) || 0) + 1;
+  ss(key, attempt);
+  const delaySec = attempt > 4 ? (attempt - 4) * 10 : 0;
+  if (delaySec > 0) {
+    voteDelayActive = true;
+    voteDelayEndsAt = Date.now() + delaySec * 1000;
+    showToast(`Vote limit reached — applying your selection in ${delaySec}s…`);
+    if (voteDelayTimer) clearInterval(voteDelayTimer);
+    voteDelayTimer = setInterval(() => {
+      if (!voteDelayActive) {
+        clearInterval(voteDelayTimer);
+        voteDelayTimer = null;
+        return;
+      }
+      renderVoterSelectModal();
+    }, 1000);
+    renderVoterSelectModal();
+    setTimeout(() => {
+      voteDelayActive = false;
+      voteDelayEndsAt = null;
+      if (voteDelayTimer) {
+        clearInterval(voteDelayTimer);
+        voteDelayTimer = null;
+      }
+      submitVote(choices, name);
+    }, delaySec * 1000);
+  } else {
+    submitVote(choices, name);
+  }
+}
+function submitVote(choices, name) {
   const devId = getDeviceId();
   const existing = (voterPoll.votes && voterPoll.votes[devId]) || null;
-  const current = voteChoices(existing);
-  const choices = current.includes(optionId)
-    ? current.filter((c) => c !== optionId)
-    : [...current, optionId];
+  const previous = voteChoices(existing);
   // Keep whatever avatar is already on this vote entry; if none yet, fall back to
   // whatever photo this device last uploaded on any poll (avoids re-uploading every time).
   const avatar = (existing && existing.avatar) || ls("hl_voter_avatar") || null;
@@ -2618,15 +2976,22 @@ function toggleVote(optionId) {
     .ref("polls/" + voterPid + "/votes/" + devId)
     .set({ name, choices, at: Date.now(), nameKey: nameKey(name), avatar })
     .then(() => {
-      const opt = pollOptions(voterPoll).find((o) => o.id === optionId);
-      const added = choices.includes(optionId);
-      showToast(
-        opt
-          ? `${added ? "Voted" : "Removed"}: ${opt.label}`
-          : added
-            ? "Vote saved"
-            : "Vote removed",
-      );
+      const optsAll = pollOptions(voterPoll);
+      const added = choices.filter((c) => !previous.includes(c));
+      const removed = previous.filter((c) => !choices.includes(c));
+      showToast(added.length || removed.length ? "Vote confirmed" : "No changes to confirm");
+      if (existing && existing.name && existing.name !== name) {
+        logVoteEvent(voterPid, name, `changed their name from "${existing.name}"`);
+      }
+      added.forEach((oid) => {
+        const opt = optsAll.find((o) => o.id === oid);
+        if (opt) logVoteEvent(voterPid, name, `selected "${opt.label}"`);
+      });
+      removed.forEach((oid) => {
+        const opt = optsAll.find((o) => o.id === oid);
+        if (opt) logVoteEvent(voterPid, name, `unselected "${opt.label}"`);
+      });
+      closeModal("modal-voter-select");
       renderVoterView();
     })
     .catch((err) => {
