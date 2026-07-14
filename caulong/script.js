@@ -998,6 +998,69 @@ const VN_WEEKDAYS_FULL = [
   "Thứ sáu",
   "Thứ bảy",
 ]; // Date.getDay(): 0=Sunday
+const EN_WEEKDAYS_FULL = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+// ─── VOTER PAGE: EN/VI LANGUAGE TOGGLE (default English) ──────────
+// Only the public voter-facing page (?poll=...) is translated — the admin
+// panel (Sessions/Members/Export/Vote tabs) stays as-is since it's only
+// ever seen by the club admin.
+let voterLang = ls("hl_voter_lang") || "en";
+function setVoterLang(lang) {
+  voterLang = lang === "vi" ? "vi" : "en";
+  ss("hl_voter_lang", voterLang);
+  renderVoterView();
+}
+function toggleVoterLang() {
+  setVoterLang(voterLang === "en" ? "vi" : "en");
+}
+function weekdayName(dayIndex) {
+  return (voterLang === "vi" ? VN_WEEKDAYS_FULL : EN_WEEKDAYS_FULL)[dayIndex];
+}
+const VOTER_STRINGS = {
+  tabInfo: { en: "Details", vi: "Chi tiết" },
+  tabVote: { en: "Vote", vi: "Vote" },
+  tabParticipants: { en: "Participants", vi: "Người tham gia" },
+  tabPayment: { en: "Payment", vi: "Thanh toán" },
+  viewLocation: { en: "View location", vi: "Xem vị trí" },
+  showMap: { en: "Show map", vi: "Hiển thị bản đồ" },
+  noAddress: { en: "No address yet.", vi: "Chưa có địa chỉ." },
+  organizer: { en: "Organizer", vi: "Người tổ chức" },
+  totalVoters: { en: "Total voters", vi: "Tổng số người vote" },
+  noVotesYet: {
+    en: "No one has voted yet.",
+    vi: "Chưa có ai tham gia bình chọn.",
+  },
+  paymentPending: {
+    en: "Brian will update payment info once the session is created.",
+    vi: "Brian sẽ cập nhật thông tin thanh toán khi buổi được tạo.",
+  },
+  collected: { en: "Collected", vi: "Đã thu" },
+  progress: { en: "Progress", vi: "Tiến độ" },
+  costs: { en: "Costs", vi: "Chi phí" },
+  noCosts: { en: "No costs yet.", vi: "Chưa có khoản chi." },
+  members: { en: "Members", vi: "Thành viên" },
+  noMembers: { en: "No members yet.", vi: "Chưa có thành viên." },
+  costItem: { en: "Cost item", vi: "Khoản chi" },
+  perPerson: { en: "/person", vi: "/người" },
+  unassigned: { en: "Unassigned", vi: "Chưa gán" },
+  paidStatus: { en: "Paid", vi: "Đã thanh toán" },
+  owes: { en: "Owes", vi: "Còn nợ" },
+  paidBadge: { en: "✓ Paid", vi: "✓ Đã trả" },
+  notPaidBadge: { en: "Not paid", vi: "Chưa trả" },
+};
+function t(key) {
+  const entry = VOTER_STRINGS[key];
+  if (!entry) return key;
+  return entry[voterLang] || entry.en;
+}
 
 function mapsLink(address) {
   return (
@@ -2917,7 +2980,7 @@ function switchVvTab(tab) {
 // ─── TAB: CHI TIẾT (date / address / maps) ─────────────────────────
 function renderPollInfoTab(p) {
   const d = new Date(p.date + "T00:00:00");
-  const weekdayDate = `${VN_WEEKDAYS_FULL[d.getDay()]}, ${fmtDate(p.date)}`;
+  const weekdayDate = `${weekdayName(d.getDay())}, ${fmtDate(p.date)}`;
 
   let html = `<div class="info-row">
       <div class="info-ico">${ICON_CALENDAR}</div>
@@ -2932,15 +2995,15 @@ function renderPollInfoTab(p) {
     html += `<div class="info-row">
       <div class="info-ico">${ICON_PIN}</div>
       <div class="info-main">
-        <div class="info-title">${esc(p.address || "Xem vị trí")}</div>
-        ${url ? `<a class="info-link" href="${url}" target="_blank" rel="noopener">Hiển thị bản đồ</a>` : ""}
+        <div class="info-title">${esc(p.address || t("viewLocation"))}</div>
+        ${url ? `<a class="info-link" href="${url}" target="_blank" rel="noopener">${t("showMap")}</a>` : ""}
       </div>
     </div>`;
   } else {
     html += `<div class="info-row">
       <div class="info-ico">${ICON_PIN}</div>
       <div class="info-main">
-        <div class="info-sub">Chưa có địa chỉ.</div>
+        <div class="info-sub">${t("noAddress")}</div>
       </div>
     </div>`;
   }
@@ -2995,10 +3058,10 @@ function renderVoterView() {
 
   const tabBar = `
     <div class="vv-tabs">
-      <button class="vv-tab ${vvActiveTab === "info" ? "active" : ""}" onclick="switchVvTab('info')">Chi tiết</button>
-      <button class="vv-tab ${vvActiveTab === "details" ? "active" : ""}" onclick="switchVvTab('details')">Vote</button>
-      <button class="vv-tab ${vvActiveTab === "participants" ? "active" : ""}" onclick="switchVvTab('participants')">Người tham gia</button>
-      <button class="vv-tab ${vvActiveTab === "payment" ? "active" : ""}" onclick="switchVvTab('payment')">Thanh toán</button>
+      <button class="vv-tab ${vvActiveTab === "info" ? "active" : ""}" onclick="switchVvTab('info')">${t("tabInfo")}</button>
+      <button class="vv-tab ${vvActiveTab === "details" ? "active" : ""}" onclick="switchVvTab('details')">${t("tabVote")}</button>
+      <button class="vv-tab ${vvActiveTab === "participants" ? "active" : ""}" onclick="switchVvTab('participants')">${t("tabParticipants")}</button>
+      <button class="vv-tab ${vvActiveTab === "payment" ? "active" : ""}" onclick="switchVvTab('payment')">${t("tabPayment")}</button>
     </div>`;
 
   let tabContent;
@@ -3012,9 +3075,18 @@ function renderVoterView() {
     tabContent = `${summaryRows}${changeBtn}${logSection}`;
   }
 
+  const langToggle = `
+    <div style="display:inline-flex;background:var(--bg);border-radius:20px;padding:2px;gap:2px">
+      <button onclick="setVoterLang('en')" style="border:none;font-size:11px;font-weight:${voterLang === "en" ? "700" : "500"};padding:4px 10px;border-radius:16px;cursor:pointer;background:${voterLang === "en" ? "var(--surface)" : "transparent"};color:${voterLang === "en" ? "var(--text)" : "var(--muted)"};box-shadow:${voterLang === "en" ? "var(--shadow)" : "none"}">EN</button>
+      <button onclick="setVoterLang('vi')" style="border:none;font-size:11px;font-weight:${voterLang === "vi" ? "700" : "500"};padding:4px 10px;border-radius:16px;cursor:pointer;background:${voterLang === "vi" ? "var(--surface)" : "transparent"};color:${voterLang === "vi" ? "var(--text)" : "var(--muted)"};box-shadow:${voterLang === "vi" ? "var(--shadow)" : "none"}">VI</button>
+    </div>`;
+
   body.innerHTML = `
-    <div style="position:relative;text-align:center;margin-bottom:14px">
-      <span class="badge-pill ${open ? "badge-green" : "badge-coral"}" style="position:absolute;top:0;right:0">${open ? "🟢 Open" : "🔒 Closed"}</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      ${langToggle}
+      <span class="badge-pill ${open ? "badge-green" : "badge-coral"}">${open ? "🟢 Open" : "🔒 Closed"}</span>
+    </div>
+    <div style="text-align:center;margin-bottom:14px">
       <div style="font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(title)}</div>
       <div style="font-size:16px;font-weight:600;color:var(--muted);margin-top:4px">${esc(fmtDate(p.date))}</div>
     </div>
@@ -3034,7 +3106,7 @@ function renderParticipantsTab(p, groups) {
   // see the "Brian" login link on the voter page) when left blank.
   const organizerName = (p && p.organizer && p.organizer.trim()) || "Brian";
   const organizerRow = `
-    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Người tổ chức</div>
+    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${t("organizer")}</div>
     <div class="player-item" style="margin-bottom:18px">
       <div class="avatar">${initials(organizerName)}</div>
       <div style="flex:1">
@@ -3048,7 +3120,7 @@ function renderParticipantsTab(p, groups) {
   const totalVoters = p && p.votes ? Object.keys(p.votes).length : 0;
   const totalRow = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)">
-      <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Tổng số người vote</div>
+      <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${t("totalVoters")}</div>
       <div style="font-size:16px;font-weight:700">${totalVoters}</div>
     </div>`;
 
@@ -3130,7 +3202,7 @@ function renderParticipantsTab(p, groups) {
   const optionsHtml =
     mainHtml || leftoverHtml
       ? mainHtml + leftoverHtml
-      : '<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 10px">Chưa có ai tham gia bình chọn.</div>';
+      : `<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 10px">${t("noVotesYet")}</div>`;
 
   return organizerRow + totalRow + optionsHtml;
 }
@@ -3145,7 +3217,7 @@ function renderPaymentTab(p) {
   if (!sc) {
     return `<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 10px;line-height:1.6">
       <br>
-      Brian sẽ cập nhật thông tin thanh toán khi buổi được tạo.
+      ${t("paymentPending")}
     </div>`;
   }
   const pct = sc.total > 0 ? Math.round((sc.collected / sc.total) * 100) : 0;
@@ -3155,8 +3227,8 @@ function renderPaymentTab(p) {
     <div class="cost-line">
       <span class="cost-line-emoji">${c.emoji || "🗒️"}</span>
       <div style="flex:1">
-        <div class="cost-line-name">${esc(c.name || "Khoản chi")}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${c.names && c.names.length ? c.names.map(esc).join(", ") : "Unassigned"} · ${fmt(c.perPerson)}/người</div>
+        <div class="cost-line-name">${esc(c.name || t("costItem"))}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${c.names && c.names.length ? c.names.map(esc).join(", ") : t("unassigned")} · ${fmt(c.perPerson)}${t("perPerson")}</div>
       </div>
       <div class="cost-amount">${fmt(c.amount)}</div>
     </div>`,
@@ -3169,9 +3241,9 @@ function renderPaymentTab(p) {
       <div class="avatar ${m.paid ? "av-paid" : ""}">${initials(m.name)}</div>
       <div style="flex:1">
         <div class="pi-name">${esc(m.name)}</div>
-        <div class="pi-detail ${m.paid ? "paid-detail" : ""}">${m.paid ? "Đã thanh toán" : "Còn nợ " + fmt(m.amount)}</div>
+        <div class="pi-detail ${m.paid ? "paid-detail" : ""}">${m.paid ? t("paidStatus") : t("owes") + " " + fmt(m.amount)}</div>
       </div>
-      <span class="badge-pill ${m.paid ? "badge-green" : "badge-coral"}">${m.paid ? "✓ Đã trả" : "Chưa trả"}</span>
+      <span class="badge-pill ${m.paid ? "badge-green" : "badge-coral"}">${m.paid ? t("paidBadge") : t("notPaidBadge")}</span>
     </div>`,
     )
     .join("");
@@ -3182,16 +3254,16 @@ function renderPaymentTab(p) {
         <div style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin-top:2px">${fmt(sc.total)}</div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:11px;color:var(--muted)">Đã thu</div>
+        <div style="font-size:11px;color:var(--muted)">${t("collected")}</div>
         <div style="font-size:16px;font-weight:600;color:var(--green)">${fmt(sc.collected)}</div>
       </div>
     </div>
-    <div class="prog-label"><span>Tiến độ</span><span>${pct}%</span></div>
+    <div class="prog-label"><span>${t("progress")}</span><span>${pct}%</span></div>
     <div class="prog-wrap"><div class="prog-bar" style="width:${pct}%"></div></div>
-    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">Chi phí</div>
-    ${costLines || '<div style="font-size:12px;color:var(--hint)">Chưa có khoản chi.</div>'}
-    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">Thành viên</div>
-    ${memberLines || '<div style="font-size:12px;color:var(--hint)">Chưa có thành viên.</div>'}
+    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">${t("costs")}</div>
+    ${costLines || `<div style="font-size:12px;color:var(--hint)">${t("noCosts")}</div>`}
+    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">${t("members")}</div>
+    ${memberLines || `<div style="font-size:12px;color:var(--hint)">${t("noMembers")}</div>`}
   `;
 }
 
