@@ -1051,6 +1051,7 @@ const VOTER_STRINGS = {
   costItem: { en: "Cost item", vi: "Khoản chi" },
   perPerson: { en: "/person", vi: "/người" },
   unassigned: { en: "Unassigned", vi: "Chưa gán" },
+  absent: { en: "Absent", vi: "Vắng mặt" },
   paidStatus: { en: "Paid", vi: "Đã thanh toán" },
   owes: { en: "Owes", vi: "Còn nợ" },
   paidBadge: { en: "✓ Paid", vi: "✓ Đã trả" },
@@ -2551,6 +2552,24 @@ function logVoteEvent(pid, name, action) {
     .set({ name: name || "Someone", action, at: Date.now() })
     .catch((err) => console.error("Log write failed", err));
 }
+// One Submit tap = one log entry, even if several options were toggled at
+// once — e.g. "Brian selected: Option A, Option C" instead of two separate
+// lines. `added`/`removed` are arrays of option LABELS (already resolved at
+// submit time so the log stays accurate even if an option is later renamed).
+function logVoteChangeEvent(pid, name, added, removed) {
+  if (!fbReady() || !pid) return;
+  if ((!added || !added.length) && (!removed || !removed.length)) return;
+  fdb
+    .ref("polls/" + pid + "/logs")
+    .push()
+    .set({
+      name: name || "Someone",
+      selected: added && added.length ? added : null,
+      unselected: removed && removed.length ? removed : null,
+      at: Date.now(),
+    })
+    .catch((err) => console.error("Log write failed", err));
+}
 function formatLogTime(ts) {
   if (!ts) return "";
   return new Date(ts).toLocaleString("en-GB", {
@@ -2560,6 +2579,24 @@ function formatLogTime(ts) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+// Renders the body of one activity entry (everything after the bold name).
+// New-style entries (one per Submit tap) carry `selected`/`unselected` label
+// arrays, rendered as a numbered list with each option bolded. Older entries
+// (name changes, suggested options, and logs written before this feature)
+// only have a plain `action` string, rendered as before.
+function renderLogEntryBody(l) {
+  if (l.selected || l.unselected) {
+    let out = "";
+    if (l.selected && l.selected.length) {
+      out += `selected:<ol style="margin:4px 0 4px 18px;padding:0">${l.selected.map((label) => `<li><b>${esc(label)}</b></li>`).join("")}</ol>`;
+    }
+    if (l.unselected && l.unselected.length) {
+      out += `unselected:<ol style="margin:4px 0 4px 18px;padding:0">${l.unselected.map((label) => `<li><b>${esc(label)}</b></li>`).join("")}</ol>`;
+    }
+    return out;
+  }
+  return esc(l.action || "");
 }
 function renderLogListHtml(logs, search) {
   const q = (search || "").trim().toLowerCase();
@@ -2574,7 +2611,7 @@ function renderLogListHtml(logs, search) {
     .map(
       (l) => `
     <div style="padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
-      <span style="font-weight:600">${esc(l.name || "Someone")}</span> ${esc(l.action || "")}
+      <span style="font-weight:600">${esc(l.name || "Someone")}</span> ${renderLogEntryBody(l)}
       <div style="color:var(--hint);font-size:10px;margin-top:1px">${formatLogTime(l.at)}</div>
     </div>`,
     )
@@ -3124,22 +3161,60 @@ function renderParticipantsTab(p, groups) {
       <div style="font-size:16px;font-weight:700">${totalVoters}</div>
     </div>`;
 
-  // "+1", "+2", … are guest-count modifiers, not real attendance options —
-  // when someone picks one alongside a main option (e.g. "Join" + "+2"),
-  // show it as a badge on their own avatar and fold it into that group's
-  // total instead of listing it as its own separate section.
-  const isGuestOption = (label) => /^\+\d+$/.test((label || "").trim());
-  const guestExtra = (v) => {
+  // "+N" options are guest-count modifiers, not real attendance choices.
+  // "+2 T2" adds 2 guests to whichever main option's label contains "T2"
+  // (case-insensitive substring match); a bare "+2" with no suffix defaults
+  // to the FIRST main option in the poll, so people don't have to pick a day
+  // twice just to say how many guests they're bringing.
+  const GUEST_RE = /^\+(\d+)(?:\s+(.+))?$/;
+  const isGuestOption = (label) => GUEST_RE.test((label || "").trim());
+
+  const mainGroups = groups.filter((g) => !isGuestOption(g.label));
+  const guestGroups = groups.filter((g) => isGuestOption(g.label));
+
+  // Resolve each guest option to { amount, mainId } once up front.
+  const guestMeta = {};
+  guestGroups.forEach((g) => {
+    const m = GUEST_RE.exec(g.label.trim());
+    const amount = parseInt(m[1], 10) || 0;
+    const suffix = (m[2] || "").trim().toLowerCase();
+    let mainId = null;
+    if (suffix) {
+      const match = mainGroups.find((mg) =>
+        mg.label.toLowerCase().includes(suffix),
+      );
+      if (match) mainId = match.id;
+    }
+    if (!mainId && mainGroups.length) mainId = mainGroups[0].id;
+    guestMeta[g.id] = { amount, mainId };
+  });
+  // Total guests a voter is bringing that are attributed to a given main
+  // option id (0 if none of their guest picks resolve to that main option).
+  const guestExtraForMain = (v, mainId) => {
     const chosen = voteChoices(v);
     let extra = 0;
-    groups.forEach((g) => {
-      if (isGuestOption(g.label) && chosen.includes(g.id)) {
-        extra += parseInt(g.label.slice(1), 10) || 0;
-      }
+    chosen.forEach((oid) => {
+      const meta = guestMeta[oid];
+      if (meta && meta.mainId === mainId) extra += meta.amount;
     });
     return extra;
   };
-  const renderAvatarCell = (v, tone, extra) => {
+
+  // Each member gets one fixed avatar color derived from their name, so the
+  // same person looks the same across every option group instead of picking
+  // up that group's color (previously used g.tone, which changed per group).
+  const hashStr = (s) => {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h;
+  };
+  const avatarToneFor = (v) => {
+    const key = String((v && (v.nameKey || v.name)) || "");
+    return OPTION_PALETTE[hashStr(key) % OPTION_PALETTE.length];
+  };
+
+  const renderAvatarCell = (v, extra, absent) => {
+    const tone = avatarToneFor(v);
     const nameLabel = extra > 0 ? `${esc(v.name)} +${extra}` : esc(v.name);
     return `
           <div style="display:flex;flex-direction:column;align-items:center;width:64px;text-align:center">
@@ -3156,23 +3231,33 @@ function renderParticipantsTab(p, groups) {
               }
             </div>
             <div style="font-size:11px;margin-top:4px;line-height:1.25;word-break:break-word">${nameLabel}</div>
+            ${absent ? `<span class="badge-pill badge-coral" style="margin-top:4px">${t("absent")}</span>` : ""}
           </div>`;
   };
 
-  const mainGroups = groups.filter((g) => !isGuestOption(g.label));
-  const guestGroups = groups.filter((g) => isGuestOption(g.label));
+  const allVotes = p && p.votes ? Object.values(p.votes) : [];
   const shown = new Set(); // vote entries already rendered inside a main group
 
   const mainHtml = mainGroups
-    .filter((g) => g.votes.length > 0)
     .map((g) => {
-      let total = g.votes.length;
-      const cells = g.votes
+      // Everyone who directly picked this main option, plus anyone who only
+      // tagged a guest option pointing at it (e.g. picked "+3 T6" but never
+      // explicitly picked T6 themselves — they're sending guests but are
+      // personally absent, so they don't take up a seat of their own).
+      const directSet = new Set(g.votes);
+      const implicit = allVotes.filter(
+        (v) => !directSet.has(v) && guestExtraForMain(v, g.id) > 0,
+      );
+      const voters = g.votes.concat(implicit);
+      if (voters.length === 0) return "";
+      let total = 0;
+      const cells = voters
         .map((v) => {
           shown.add(v);
-          const extra = guestExtra(v);
-          total += extra;
-          return renderAvatarCell(v, g.tone, extra);
+          const isDirect = directSet.has(v);
+          const extra = guestExtraForMain(v, g.id);
+          total += (isDirect ? 1 : 0) + extra;
+          return renderAvatarCell(v, extra, !isDirect);
         })
         .join("");
       return `
@@ -3183,14 +3268,14 @@ function renderParticipantsTab(p, groups) {
     })
     .join("");
 
-  // Rare edge case: someone picked only a "+N" option with no main option at
-  // all, so they never got merged above — still show them, plainly, so no
-  // vote silently disappears.
+  // Safety net: only reachable if the poll has no main options at all (so
+  // guest picks had nothing to default to) — still show them, plainly, so
+  // no vote silently disappears.
   const leftoverHtml = guestGroups
     .map((g) => {
       const leftover = g.votes.filter((v) => !shown.has(v));
       if (leftover.length === 0) return "";
-      const cells = leftover.map((v) => renderAvatarCell(v, g.tone, 0)).join("");
+      const cells = leftover.map((v) => renderAvatarCell(v, 0)).join("");
       return `
     <div style="margin-bottom:18px">
       <div style="font-size:13px;font-weight:600;color:${g.tone.text};margin-bottom:10px">${esc(g.label)} · ${leftover.length}</div>
@@ -3644,14 +3729,19 @@ function submitVote(choices, name) {
           `changed their name from "${existing.name}"`,
         );
       }
-      added.forEach((oid) => {
-        const opt = optsAll.find((o) => o.id === oid);
-        if (opt) logVoteEvent(voterPid, name, `selected "${opt.label}"`);
-      });
-      removed.forEach((oid) => {
-        const opt = optsAll.find((o) => o.id === oid);
-        if (opt) logVoteEvent(voterPid, name, `unselected "${opt.label}"`);
-      });
+      const addedLabels = added
+        .map((oid) => {
+          const opt = optsAll.find((o) => o.id === oid);
+          return opt ? opt.label : null;
+        })
+        .filter(Boolean);
+      const removedLabels = removed
+        .map((oid) => {
+          const opt = optsAll.find((o) => o.id === oid);
+          return opt ? opt.label : null;
+        })
+        .filter(Boolean);
+      logVoteChangeEvent(voterPid, name, addedLabels, removedLabels);
       closeModal("modal-voter-select");
       renderVoterView();
     })
