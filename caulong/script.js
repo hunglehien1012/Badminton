@@ -108,11 +108,18 @@ function nameKey(s) {
 // khoảng trắng) trước khi so khớp, để bắt được cả biến thể cách chữ ra
 // ("n u r u") lẫn có dấu ("Nauy"). Bất kỳ tên nào chứa số 7 (ở bất kỳ vị trí
 // nào, kể cả xen giữa như "007") hoặc chữ "bảy" cũng bị chặn.
-const BLOCKED_NAME_SUBSTRINGS = ["nuru", "brian", "nauy"];
+const BLOCKED_NAME_SUBSTRINGS = ["nuru", "brian", "nauy", "nu"];
 function normalizeForNameBlockCheck(s) {
   return (s || "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    // Strip only the 5 Vietnamese TONE marks (sắc/huyền/hỏi/ngã/nặng) —
+    // deliberately NOT the full \u0300-\u036f range, because that range also
+    // covers the horn/breve/circumflex marks that turn "u"/"o"/"a"/"e" into
+    // entirely different letters ("ư"/"ơ"/"ă"/"â"/"ê"/"ô"). Stripping those
+    // too would wrongly collapse e.g. "Nữ" down to "nu" and trip the "nu"
+    // filter on a completely unrelated name.
+    .replace(/[\u0300\u0301\u0303\u0309\u0323]/g, "")
+    .normalize("NFC") // recompose the remaining accented letters back into single characters
     .replace(/đ/g, "d")
     .toLowerCase()
     .replace(/\s+/g, "");
@@ -2423,6 +2430,69 @@ async function removePollVoterByName(pid) {
       );
     });
 }
+// Lets the admin fix a voter's display name directly (typo, wrong device
+// name, etc.) without needing that person to reopen the vote link themselves.
+async function renamePollVoter(pid) {
+  const p = pollsCache[pid];
+  if (!p || !p.votes) {
+    showToast("No votes yet on this poll");
+    return;
+  }
+  const oldName = await showPrompt({
+    title: "Rename voter",
+    label: "Current name (exact)",
+    placeholder: "E.g.: HHH",
+    confirmText: "Find",
+    cancelText: "Cancel",
+  });
+  if (!oldName || !oldName.trim()) return;
+  const target = oldName.trim().toLowerCase();
+  const matches = Object.entries(p.votes).filter(
+    ([, v]) => (v.name || "").trim().toLowerCase() === target,
+  );
+  if (matches.length === 0) {
+    showToast(`No voter found named "${oldName.trim()}"`);
+    return;
+  }
+  const newName = await showPrompt({
+    title: "Rename voter",
+    label: `New name for "${oldName.trim()}"`,
+    placeholder: "E.g.: Hùng",
+    confirmText: "Rename",
+    cancelText: "Cancel",
+  });
+  if (!newName || !newName.trim()) return;
+  const cleanNew = newName.trim();
+  if (isNameBlocked(cleanNew)) {
+    showToast("That name isn't allowed");
+    return;
+  }
+  const ok = await showConfirm({
+    title: "Rename voter",
+    message: `Rename ${matches.length} vote entr${matches.length > 1 ? "ies" : "y"} from "${oldName.trim()}" to "${cleanNew}"?`,
+    yesText: "Rename",
+    noText: "Cancel",
+    tone: "info",
+  });
+  if (!ok) return;
+  Promise.all(
+    matches.map(([devId]) =>
+      fdb
+        .ref("polls/" + pid + "/votes/" + devId)
+        .update({ name: cleanNew, nameKey: nameKey(cleanNew) }),
+    ),
+  )
+    .then(() => {
+      logVoteEvent(pid, cleanNew, `was renamed by admin (was "${oldName.trim()}")`);
+      showToast("Voter renamed ✏️");
+    })
+    .catch((err) => {
+      console.error(err);
+      showToast(
+        "Error: " + (err && err.message ? err.message : "couldn't connect"),
+      );
+    });
+}
 
 function renderPollList() {
   const wrap = document.getElementById("poll-list");
@@ -2483,6 +2553,7 @@ function renderPollList() {
           <button class="btn btn-green btn-sm" onclick="createSessionFromPoll('${pid}')">🏸 Create Session</button>
           ${linkSelect}
           <button class="btn btn-ghost btn-sm" onclick="clearPollLog('${pid}')" title="Delete all Activity log entries for this vote">🧹 Clear Log</button>
+          <button class="btn btn-ghost btn-sm" onclick="renamePollVoter('${pid}')" title="Rename a specific voter's entry">✏️ Rename Voter</button>
           <button class="btn btn-ghost btn-sm" onclick="removePollVoterByName('${pid}')" title="Remove a specific voter's entry by name">🚫 Remove Voter</button>
           <button class="btn btn-danger btn-sm" onclick="deletePoll('${pid}')">🗑</button>
         </div>
@@ -2592,6 +2663,7 @@ async function initVoterView(pid) {
     (snap) => {
       voterPoll = snap.val();
       migrateLegacyVote(pid, voterPoll);
+      syncLockedNameFromServer(voterPoll);
       renderVoterView();
     },
     (err) => {
@@ -2600,6 +2672,19 @@ async function initVoterView(pid) {
         '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.</div>';
     },
   );
+}
+// If an admin renames this device's own vote entry (see renamePollVoter),
+// the server's `name` is now the source of truth for this device. Without
+// this, the device's cached "locked name" would stay stale and silently
+// overwrite the admin's rename right back on the voter's next Submit tap.
+function syncLockedNameFromServer(poll) {
+  if (!poll || !poll.votes) return;
+  const serverEntry = poll.votes[getDeviceId()];
+  if (!serverEntry || !serverEntry.name) return;
+  const local = (ls("hl_voter_locked_name") || "").trim();
+  if (serverEntry.name !== local) {
+    ss("hl_voter_locked_name", serverEntry.name);
+  }
 }
 
 let vvExpanded = new Set();
