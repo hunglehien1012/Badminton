@@ -3399,18 +3399,30 @@ function addVoterOption() {
     showToast("That option already exists");
     return;
   }
-  const ref = fdb.ref("polls/" + voterPid + "/options").push();
+  // Prefer the already-locked name; if this person hasn't voted/locked a name
+  // yet this session, fall back to whatever they've typed into the "Your
+  // name" field so far, so the activity log can credit them by name instead
+  // of showing "Someone".
   const lockedName = (ls("hl_voter_locked_name") || "").trim();
+  const nameInp = document.getElementById("vv-name");
+  const typedName = nameInp ? nameInp.value.trim() : "";
+  const voterName = lockedName || typedName;
+  if (!voterName) {
+    showToast("Please enter your name first");
+    if (nameInp) nameInp.focus();
+    return;
+  }
+  if (isNameBlocked(voterName)) {
+    showToast("Invalid name");
+    return;
+  }
+  const ref = fdb.ref("polls/" + voterPid + "/options").push();
   ref
-    .set({ id: ref.key, label, addedBy: lockedName || null, at: Date.now() })
+    .set({ id: ref.key, label, addedBy: voterName, at: Date.now() })
     .then(() => {
       if (inp) inp.value = "";
       showToast("Option added ✅");
-      logVoteEvent(
-        voterPid,
-        lockedName || "Someone",
-        `added new option "${label}"`,
-      );
+      logVoteEvent(voterPid, voterName, `added new option "${label}"`);
     })
     .catch((err) => {
       console.error(err);
