@@ -2356,6 +2356,74 @@ function pollVotesFor(p, optionId) {
     .sort((a, b) => (a.at || 0) - (b.at || 0));
 }
 
+// ─── ADMIN: CLEAR ACTIVITY LOG / REMOVE A VOTER (per poll) ────────
+// Handy for wiping test data (or removing a specific person's vote) without
+// needing DevTools — everything goes through the same custom confirm/prompt
+// dialogs already used elsewhere in the admin panel.
+function clearPollLog(pid) {
+  showConfirm({
+    title: "Clear activity log",
+    message:
+      "This deletes every Activity entry for this vote (who selected what, name changes, added options…). This can't be undone.",
+    yesText: "Clear log",
+    noText: "Cancel",
+  }).then((ok) => {
+    if (!ok) return;
+    fdb
+      .ref("polls/" + pid + "/logs")
+      .remove()
+      .then(() => showToast("Activity log cleared 🧹"))
+      .catch((err) => {
+        console.error(err);
+        showToast(
+          "Error: " + (err && err.message ? err.message : "couldn't connect"),
+        );
+      });
+  });
+}
+async function removePollVoterByName(pid) {
+  const p = pollsCache[pid];
+  if (!p || !p.votes) {
+    showToast("No votes yet on this poll");
+    return;
+  }
+  const name = await showPrompt({
+    title: "Remove voter",
+    label: "Exact name to remove",
+    placeholder: "E.g.: HHH",
+    confirmText: "Find",
+    cancelText: "Cancel",
+  });
+  if (!name || !name.trim()) return;
+  const target = name.trim().toLowerCase();
+  const matches = Object.entries(p.votes).filter(
+    ([, v]) => (v.name || "").trim().toLowerCase() === target,
+  );
+  if (matches.length === 0) {
+    showToast(`No voter found named "${name.trim()}"`);
+    return;
+  }
+  const ok = await showConfirm({
+    title: "Remove voter",
+    message: `Remove ${matches.length} vote entr${matches.length > 1 ? "ies" : "y"} named "${name.trim()}"? This can't be undone.`,
+    yesText: "Remove",
+    noText: "Cancel",
+  });
+  if (!ok) return;
+  Promise.all(
+    matches.map(([devId]) =>
+      fdb.ref("polls/" + pid + "/votes/" + devId).remove(),
+    ),
+  )
+    .then(() => showToast("Voter removed 🗑"))
+    .catch((err) => {
+      console.error(err);
+      showToast(
+        "Error: " + (err && err.message ? err.message : "couldn't connect"),
+      );
+    });
+}
+
 function renderPollList() {
   const wrap = document.getElementById("poll-list");
   const ids = Object.keys(pollsCache);
@@ -2414,6 +2482,8 @@ function renderPollList() {
           <button class="btn btn-ghost btn-sm" onclick="togglePollStatus('${pid}')">${open ? "🔒 Close" : "🔓 Reopen"}</button>
           <button class="btn btn-green btn-sm" onclick="createSessionFromPoll('${pid}')">🏸 Create Session</button>
           ${linkSelect}
+          <button class="btn btn-ghost btn-sm" onclick="clearPollLog('${pid}')" title="Delete all Activity log entries for this vote">🧹 Clear Log</button>
+          <button class="btn btn-ghost btn-sm" onclick="removePollVoterByName('${pid}')" title="Remove a specific voter's entry by name">🚫 Remove Voter</button>
           <button class="btn btn-danger btn-sm" onclick="deletePoll('${pid}')">🗑</button>
         </div>
       </div>
