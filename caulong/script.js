@@ -4074,6 +4074,7 @@ function openVoterSelectModal() {
     showToast("This vote is closed");
     return;
   }
+  vvShowAddOptionInput = false;
   ensurePendingChoices(voterPid, voteChoices(getMyVoteEntry()));
   renderVoterSelectModal();
   openModal("modal-voter-select");
@@ -4085,6 +4086,7 @@ function closeVoterSelectModal() {
   }
   // Discard any un-submitted taps made inside the modal
   vvPendingChoices = new Set(voteChoices(getMyVoteEntry()));
+  vvShowAddOptionInput = false;
   closeModal("modal-voter-select");
 }
 function renderVoterSelectModal() {
@@ -4121,11 +4123,17 @@ function renderVoterSelectModal() {
         <input type="text" id="vv-name" placeholder="Enter your full name…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()">
       </div>`;
   const addOptionBox = open
-    ? `<div style="display:flex;gap:6px;margin-top:10px">
-        <input type="text" id="vv-new-option" placeholder="Suggest another option…" maxlength="30" style="flex:1"
-          onkeydown="if(event.key==='Enter'){addVoterOption();}">
-        <button class="btn btn-ghost btn-sm" onclick="addVoterOption()" style="white-space:nowrap">+ Add option</button>
-      </div>`
+    ? vvShowAddOptionInput
+      ? `<div class="fb-add-option-input">
+          <input type="text" id="vv-new-option" placeholder="Option label…" maxlength="30" autocomplete="off" style="flex:1"
+            onkeydown="if(event.key==='Enter'){addVoterOption();} if(event.key==='Escape'){cancelAddOptionField();}">
+          <button class="fb-add-confirm" onclick="addVoterOption()" title="Add">✓</button>
+          <button class="fb-add-cancel" onclick="cancelAddOptionField()" title="Cancel">✕</button>
+        </div>`
+      : `<div class="fb-add-option" onclick="showAddOptionField()">
+          <span class="fb-add-circle">+</span>
+          <span class="fb-add-label">Add option…</span>
+        </div>`
     : "";
   const modalBody = document.getElementById("vv-modal-body");
   if (modalBody) {
@@ -4149,6 +4157,21 @@ function renderVoterSelectModal() {
       : "Submit";
   }
   if (cancelBtn) cancelBtn.disabled = voteDelayActive;
+}
+
+// Expands the "+ Add option" row into an inline text field (focused automatically).
+function showAddOptionField() {
+  vvShowAddOptionInput = true;
+  renderVoterSelectModal();
+  setTimeout(() => {
+    const inp = document.getElementById("vv-new-option");
+    if (inp) inp.focus();
+  }, 0);
+}
+// Collapses the inline text field back into the "+ Add option" row.
+function cancelAddOptionField() {
+  vvShowAddOptionInput = false;
+  renderVoterSelectModal();
 }
 
 // Members can suggest a new vote option from the public vote page itself,
@@ -4193,6 +4216,12 @@ function addVoterOption() {
     .set({ id: ref.key, label, addedBy: voterName, at: Date.now() })
     .then(() => {
       if (inp) inp.value = "";
+      // Auto-select the option this device just created, so the user doesn't
+      // have to tap it again before hitting Submit.
+      ensurePendingChoices(voterPid, voteChoices(getMyVoteEntry()));
+      vvPendingChoices.add(ref.key);
+      vvShowAddOptionInput = false;
+      renderVoterSelectModal();
       showToast("Option added ✅");
       logVoteEvent(voterPid, voterName, `added new option "${label}"`);
     })
@@ -4275,6 +4304,7 @@ let voteDelayEndsAt = null; // timestamp the current delay finishes, else null
 let voteDelayTimer = null; // interval id driving the live countdown in the UI
 let vvPendingChoices = null; // Set of optionIds selected locally but not yet confirmed
 let vvPendingBasePid = null; // which poll vvPendingChoices belongs to
+let vvShowAddOptionInput = false; // whether the "+ Add option" row has expanded into a text field
 function voteAttemptKey(pid) {
   return "hl_vote_attempts_" + pid;
 }
