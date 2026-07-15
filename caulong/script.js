@@ -3833,14 +3833,35 @@ function renderParticipantsTab(p, groups) {
       );
       const voters = g.votes.concat(implicit);
       if (voters.length === 0) return "";
+
+      // Merge vote entries that share the same name (case/accent-insensitive)
+      // into ONE avatar cell. This happens e.g. when the same person votes
+      // from two devices — once picking the day themselves, once only
+      // tagging "+1" — which would otherwise render as two different people
+      // ("Hùng" attending, plus a separate "Hùng +1 · Absent"). Merged, they
+      // become a single "Hùng +1" cell: attending, with the guest folded in.
+      const byName = new Map(); // nameKey -> merged entry
+      voters.forEach((v) => {
+        shown.add(v);
+        const isDirect = directSet.has(v);
+        const extra = guestExtraForMain(v, g.id);
+        const key = nameKey(v.name);
+        const entry = byName.get(key);
+        if (!entry) {
+          byName.set(key, { name: v.name, avatar: v.avatar, isDirect, extra });
+        } else {
+          entry.isDirect = entry.isDirect || isDirect;
+          entry.extra += extra;
+          if (!entry.avatar && v.avatar) entry.avatar = v.avatar;
+          if (isDirect) entry.name = v.name; // prefer the attending record's exact name/casing
+        }
+      });
+
       let total = 0;
-      const cells = voters
-        .map((v) => {
-          shown.add(v);
-          const isDirect = directSet.has(v);
-          const extra = guestExtraForMain(v, g.id);
-          total += (isDirect ? 1 : 0) + extra;
-          return renderAvatarCell(v, extra, !isDirect);
+      const cells = Array.from(byName.values())
+        .map((entry) => {
+          total += (entry.isDirect ? 1 : 0) + entry.extra;
+          return renderAvatarCell(entry, entry.extra, !entry.isDirect);
         })
         .join("");
       return `
