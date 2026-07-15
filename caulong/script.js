@@ -4124,11 +4124,12 @@ function renderVoterSelectModal() {
       </div>`;
   const addOptionBox = open
     ? vvShowAddOptionInput
-      ? `<div class="fb-add-option-input">
-          <input type="text" id="vv-new-option" placeholder="Option label…" maxlength="30" autocomplete="off" style="flex:1"
-            onkeydown="if(event.key==='Enter'){addVoterOption();} if(event.key==='Escape'){cancelAddOptionField();}">
-          <button class="fb-add-confirm" onclick="addVoterOption()" title="Add">✓</button>
-          <button class="fb-add-cancel" onclick="cancelAddOptionField()" title="Cancel">✕</button>
+      ? `<div class="fb-opt fb-opt-editing">
+          <span class="fb-check"></span>
+          <input type="text" id="vv-new-option" maxlength="30" autocomplete="off"
+            style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:500;color:var(--text)"
+            onkeydown="if(event.key==='Enter'){this.blur();} if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}"
+            onblur="handleAddOptionBlur(this)">
         </div>`
       : `<div class="fb-add-option" onclick="showAddOptionField()">
           <span class="fb-add-circle">+</span>
@@ -4159,7 +4160,8 @@ function renderVoterSelectModal() {
   if (cancelBtn) cancelBtn.disabled = voteDelayActive;
 }
 
-// Expands the "+ Add option" row into an inline text field (focused automatically).
+// Expands the "+ Add option" row into an inline text field styled exactly
+// like the other checkbox rows (focused automatically, no placeholder).
 function showAddOptionField() {
   vvShowAddOptionInput = true;
   renderVoterSelectModal();
@@ -4172,6 +4174,21 @@ function showAddOptionField() {
 function cancelAddOptionField() {
   vvShowAddOptionInput = false;
   renderVoterSelectModal();
+}
+// No explicit confirm/cancel buttons: leaving the field (blur) is what commits
+// it. Typed something → save it as a new option. Left empty (or Escape was
+// pressed) → just collapse back to the "+ Add option" row.
+function handleAddOptionBlur(inputEl) {
+  const cancelled = inputEl && inputEl.dataset.cancel === "1";
+  const val = inputEl ? inputEl.value.trim() : "";
+  setTimeout(() => {
+    if (!vvShowAddOptionInput) return; // already handled elsewhere
+    if (cancelled || !val) {
+      cancelAddOptionField();
+    } else {
+      addVoterOption();
+    }
+  }, 100);
 }
 
 // Members can suggest a new vote option from the public vote page itself,
