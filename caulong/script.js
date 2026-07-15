@@ -2218,7 +2218,7 @@ async function removePollOption(oid) {
     const p = pollsCache[editingPollId];
     const voteCount =
       p && p.votes
-        ? Object.values(p.votes).filter((v) => voteChoices(v).includes(oid))
+        ? mergedPollVotes(p).filter((v) => voteChoices(v).includes(oid))
             .length
         : 0;
     if (voteCount > 0) {
@@ -2464,9 +2464,37 @@ function togglePollExpand(pid) {
   renderPollList();
 }
 
+// Same real person can end up with two different vote entries when they use
+// two devices — e.g. one device picked their day, another only tagged a
+// "+1" guest option, or they simply voted twice by mistake. Rather than
+// showing up as two different people everywhere (Vote tab chips, avatar
+// stacks, Participants tab, session creation…), we fold same-name entries
+// into ONE before anything reads p.votes. Choices are unioned; whichever
+// record was created FIRST (earlier `at` timestamp) is kept as the
+// canonical one (its name casing wins), but an avatar from either record is
+// kept if the earlier one didn't set one.
+function mergedPollVotes(p) {
+  const raw = p && p.votes ? Object.values(p.votes) : [];
+  const byName = new Map(); // nameKey -> merged entry
+  raw.forEach((v) => {
+    const key = nameKey(v.name);
+    const prev = byName.get(key);
+    if (!prev) {
+      byName.set(key, { ...v, choices: voteChoices(v) });
+      return;
+    }
+    const earlier = (prev.at || 0) <= (v.at || 0) ? prev : v;
+    const later = earlier === prev ? v : prev;
+    const choices = Array.from(
+      new Set([...voteChoices(prev), ...voteChoices(v)]),
+    );
+    byName.set(key, { ...earlier, choices, avatar: earlier.avatar || later.avatar });
+  });
+  return Array.from(byName.values());
+}
 // Returns votes grouped by each option defined on the poll (or the defaults for old polls)
 function pollVotesByOption(p) {
-  const votes = p.votes ? Object.values(p.votes) : [];
+  const votes = mergedPollVotes(p);
   return pollOptions(p).map((o, i) => ({
     ...o,
     tone: optColor(i),
@@ -2477,7 +2505,7 @@ function pollVotesByOption(p) {
 }
 // Votes for one specific option id (e.g. the default "in" / Join option)
 function pollVotesFor(p, optionId) {
-  const votes = p.votes ? Object.values(p.votes) : [];
+  const votes = mergedPollVotes(p);
   return votes
     .filter((v) => voteChoices(v).includes(optionId))
     .sort((a, b) => (a.at || 0) - (b.at || 0));
@@ -2717,7 +2745,7 @@ function createSessionFromPoll(pid) {
   // "+N" badge, and their cost share is weighted up accordingly (see
   // calcMemberAmount / memberWeight) rather than splitting into extra people.
   const pOptions = pollOptions(p);
-  const allVotes = p.votes ? Object.values(p.votes) : [];
+  const allVotes = mergedPollVotes(p);
   const guestCounts = {}; // memberId -> total extra guests for this session
   allVotes.forEach((v) => {
     let extra = 0;
@@ -3732,6 +3760,11 @@ function renderVoterView() {
 // Shows the organizer, a total-vote summary, then every voter grouped by
 // the option they picked, as an avatar grid (name + photo/initials).
 function renderParticipantsTab(p, groups) {
+  // Distinct voters, derived from the SAME (already name-merged) vote objects
+  // used to build `groups` — reusing those references (not re-reading
+  // p.votes) matters below, where we check `directSet.has(v)` by identity.
+  const allVotes = Array.from(new Set(groups.flatMap((g) => g.votes)));
+
   // Organizer is optional per-vote; falls back to Brian (the app's admin,
   // see the "Brian" login link on the voter page) when left blank.
   const organizerName = (p && p.organizer && p.organizer.trim()) || "Brian";
@@ -3744,10 +3777,10 @@ function renderParticipantsTab(p, groups) {
       </div>
     </div>`;
 
-  // Total number of distinct people who voted, counted from p.votes directly
-  // (not summed across option groups) so someone who picked multiple options
-  // is only counted once.
-  const totalVoters = p && p.votes ? Object.keys(p.votes).length : 0;
+  // Total number of distinct people who voted (already deduped by name — see
+  // mergedPollVotes), so someone who picked multiple options, or who voted
+  // from two devices under the same name, is only counted once.
+  const totalVoters = allVotes.length;
   const totalRow = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)">
       <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${t("totalVoters")}</div>
@@ -3818,7 +3851,6 @@ function renderParticipantsTab(p, groups) {
           </div>`;
   };
 
-  const allVotes = p && p.votes ? Object.values(p.votes) : [];
   const shown = new Set(); // vote entries already rendered inside a main group
 
   const mainHtml = mainGroups
