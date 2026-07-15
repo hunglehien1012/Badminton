@@ -302,6 +302,19 @@
   </div>
 </div>
 
+<!-- ══════════════ MODAL: CREATE YOUR OWN VOTE (self-serve, no login) ══════════════ -->
+<div class="modal-backdrop" id="modal-host-create">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title" id="hc-modal-title">Create your own vote</span>
+      <span id="hc-modal-copy-icon"></span>
+      <button class="btn-icon" onclick="closeModal('modal-host-create')" style="font-size:20px">×</button>
+    </div>
+    <div class="modal-bd" id="hc-modal-body"></div>
+    <div class="modal-ft" id="hc-modal-footer"></div>
+  </div>
+</div>
+
 <!-- ══════════════ PLAYER VOTE PAGE ══════════════ -->
 <div id="voter-view">
   <div style="text-align:center;padding:18px 0 14px">
@@ -313,7 +326,23 @@
   </div></div>
   <input type="file" id="vv-avatar-input" accept="image/*" style="display:none" onchange="onVoterAvatarSelected(this)">
   <div style="text-align:center;margin-top:16px">
+    <span onclick="openHostCreateModal()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">+ Create your own vote</span>
+    &nbsp;·&nbsp;
+    <span onclick="openMyHostedVotesModal()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">My hosted votes</span>
+    &nbsp;·&nbsp;
     <span onclick="adminLogin()" style="font-size:11px;color:var(--hint);cursor:pointer">Brian</span>
+  </div>
+</div>
+
+<!-- ══════════════ SELF-SERVE HOST: CREATE / MANAGE YOUR OWN VOTE ══════════════ -->
+<div id="host-view">
+  <div class="card">
+    <div class="host-view-hd">
+      <span id="host-view-title">Manage your vote</span>
+    </div>
+    <div class="card-bd" id="host-body">
+      <div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Loading…</div>
+    </div>
   </div>
 </div>
 
