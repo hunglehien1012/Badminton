@@ -56,29 +56,49 @@ function ensureFirebaseAuth() {
   if (_authReadyPromise) return _authReadyPromise;
   _authReadyPromise = new Promise((resolve) => {
     if (!fauth) return resolve(null);
-    // Không chờ vô thời hạn: nếu sau 8s vẫn chưa có auth (ví dụ quên bật
-    // "Anonymous" trong Firebase Console → Authentication → Sign-in method),
-    // vẫn resolve để listener bên dưới chạy tiếp và tự báo lỗi rõ ràng
-    // ("Couldn't load vote data...") thay vì màn hình bị treo "Loading…" mãi.
+    // Lần ĐẦU TIÊN mở trang trên một thiết bị, Firebase phải gọi mạng để tạo
+    // tài khoản ẩn danh — trên mạng di động chậm hoặc trình duyệt trong app
+    // (Zalo/Messenger) request này hay bị chậm/fail tạm thời. Vì vậy:
+    // - Thử signInAnonymously tối đa 3 lần, giãn cách 1s → 2s (backoff).
+    // - Tổng thời gian chờ tối đa 20s thay vì 8s.
+    // - Nếu vẫn fail thì resolve(null) NHƯNG xóa cache promise, để lần gọi
+    //   ensureFirebaseAuth() tiếp theo (ví dụ khi người dùng bấm "Thử lại")
+    //   được phép thử đăng nhập lại từ đầu thay vì dính kết quả fail mãi mãi.
+    let settled = false;
+    const finish = (user) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (!user) _authReadyPromise = null; // đừng cache thất bại
+      resolve(user);
+    };
     const timeout = setTimeout(() => {
       console.error(
-        "Firebase Auth timeout — kiểm tra đã bật 'Anonymous' sign-in trong Firebase Console chưa.",
+        "Firebase Auth timeout — mạng chậm hoặc chưa bật 'Anonymous' sign-in trong Firebase Console.",
       );
-      resolve(null);
-    }, 8000);
+      finish(null);
+    }, 20000);
+    let signingIn = false;
     fauth.onAuthStateChanged((user) => {
-      if (user) {
-        clearTimeout(timeout);
-        return resolve(user);
-      }
-      fauth.signInAnonymously().catch((e) => {
-        console.error(
-          "Anonymous sign-in failed — kiểm tra đã bật 'Anonymous' sign-in trong Firebase Console chưa.",
-          e,
-        );
-        clearTimeout(timeout);
-        resolve(null);
-      });
+      if (user) return finish(user);
+      if (signingIn) return; // đã có vòng retry đang chạy
+      signingIn = true;
+      const trySignIn = (attempt) => {
+        if (settled) return;
+        fauth.signInAnonymously().catch((e) => {
+          console.error(
+            "Anonymous sign-in failed (attempt " + attempt + ")",
+            e,
+          );
+          if (attempt >= 3 || settled) {
+            finish(null);
+            return;
+          }
+          setTimeout(() => trySignIn(attempt + 1), attempt * 1000);
+        });
+        // thành công → onAuthStateChanged sẽ fire với user → finish(user)
+      };
+      trySignIn(1);
     });
   });
   return _authReadyPromise;
@@ -2810,8 +2830,18 @@ async function initVoterView(pid) {
   // không Security Rules ("auth != null") sẽ từ chối vì auth vẫn còn null —
   // đây chính là nguyên nhân member thường bị mất khả năng vote sau khi bật
   // Firebase Auth.
+  attachVoterPollListener(pid, 0);
+}
+// Gắn listener đọc dữ liệu vote, với cơ chế TỰ THỬ LẠI: lần đầu mở link trên
+// một máy mới, việc tạo tài khoản ẩn danh có thể chậm/fail tạm thời (hay gặp
+// trên iPhone mở link từ app chat) → đọc Firebase bị "permission denied" đúng
+// 1 lần. Thay vì hiện lỗi chết như trước, giờ tự đợi auth xong rồi thử lại
+// tối đa 3 lần (1.5s, 3s, 4.5s); hết 3 lần mới hiện lỗi kèm nút "Thử lại".
+async function attachVoterPollListener(pid, attempt) {
+  const body = document.getElementById("vv-body");
   await ensureFirebaseAuth();
-  fdb.ref(POLLS_ROOT + "/" + pid).on(
+  const ref = fdb.ref(POLLS_ROOT + "/" + pid);
+  ref.on(
     "value",
     (snap) => {
       voterPoll = snap.val();
@@ -2821,8 +2851,18 @@ async function initVoterView(pid) {
     },
     (err) => {
       console.error(err);
+      ref.off();
+      if (attempt < 3) {
+        setTimeout(
+          () => attachVoterPollListener(pid, attempt + 1),
+          (attempt + 1) * 1500,
+        );
+        return;
+      }
       body.innerHTML =
-        '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.</div>';
+        '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.<br><br><button class="vv-vote-btn" style="max-width:200px;margin:0 auto" onclick="attachVoterPollListener(\'' +
+        pid +
+        "', 0)\">🔄 Try again</button></div>";
     },
   );
 }
@@ -3323,14 +3363,17 @@ async function initVoterLatest() {
       '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ The vote page isn\'t configured yet. Please contact the admin.</div>';
     return;
   }
+  attachVoterLatestListener(0);
+}
+// Giống attachVoterPollListener: tự thử lại tối đa 3 lần trước khi hiện lỗi,
+// để tránh màn hình lỗi chết trong lần mở đầu tiên khi auth ẩn danh chưa kịp xong.
+async function attachVoterLatestListener(attempt) {
+  const body = document.getElementById("vv-body");
   await ensureFirebaseAuth();
-  fdb
-    .ref(POLLS_ROOT)
-    .orderByChild("createdAt")
-    .limitToLast(10)
-    .on(
-      "value",
-      (snap) => {
+  const ref = fdb.ref(POLLS_ROOT).orderByChild("createdAt").limitToLast(10);
+  ref.on(
+    "value",
+    (snap) => {
         const all = snap.val() || {};
         let best = null,
           bestId = null,
@@ -3362,8 +3405,16 @@ async function initVoterLatest() {
       },
       (err) => {
         console.error(err);
+        ref.off();
+        if (attempt < 3) {
+          setTimeout(
+            () => attachVoterLatestListener(attempt + 1),
+            (attempt + 1) * 1500,
+          );
+          return;
+        }
         body.innerHTML =
-          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.</div>';
+          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.<br><br><button class="vv-vote-btn" style="max-width:200px;margin:0 auto" onclick="attachVoterLatestListener(0)">🔄 Try again</button></div>';
       },
     );
 }
