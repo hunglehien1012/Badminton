@@ -100,7 +100,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* ─── VOTE ─── */
 .poll-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow)}
 .poll-item.closed{opacity:.75}
-.vote-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;border-radius:20px;padding:3px 10px;margin:2px 3px 2px 0;background:var(--bg);border:1px solid var(--border)}
+.vote-chip{display:inline-flex;align-items:center;vertical-align:middle;gap:4px;font-size:12px;border-radius:20px;padding:3px 10px;margin:2px 3px 2px 0;background:var(--bg);border:1px solid var(--border)}
 .vote-chip.in{background:var(--green-l);border-color:var(--green-m);color:var(--green-d)}
 .vote-chip.out{background:var(--coral-l);border-color:var(--coral-m);color:#712B13}
 .name-chip{display:inline-block;font-size:12px;border-radius:20px;padding:4px 12px;margin:3px 4px 3px 0;background:var(--bg);border:1px solid var(--border-s);cursor:pointer;transition:all .15s}
@@ -141,7 +141,7 @@ body.host-mode #host-view{display:block}
 .av:first-child{margin-left:0}
 .av.out{background:var(--coral)}
 .av.more{background:var(--border);color:var(--muted)}
-.fb-opt-names{padding:2px 4px 8px;margin-top:-2px}
+.fb-opt-names{display:flex;flex-wrap:wrap;align-items:center;padding:2px 4px 8px;margin-top:-2px}
 .vv-name-box{margin-bottom:14px}
 
 /* INPUTS */
