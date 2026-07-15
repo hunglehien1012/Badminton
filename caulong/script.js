@@ -24,6 +24,18 @@ const FIREBASE_CONFIG = {
 };
 let fdb = null;
 let fauth = null;
+// Local testing safety net: when this file is opened locally (localhost or a
+// plain file:// double-click) instead of the real deployed site, all vote
+// data is written under a separate "test_polls" node in the SAME Firebase
+// project/database — so anything you create while testing locally never
+// touches, and can never get overwritten by, the real "polls" data your
+// members actually vote on. No extra setup needed — the real deployed site
+// (any other domain) still reads/writes "polls" exactly as before.
+const IS_LOCAL_ENV =
+  location.hostname === "localhost" ||
+  location.hostname === "127.0.0.1" ||
+  location.protocol === "file:";
+const POLLS_ROOT = IS_LOCAL_ENV ? "test_polls" : "polls";
 // 👉 Mã quản trị: mật khẩu của tài khoản admin bạn tạo trong Firebase Console
 // (Authentication → Users → Add user). Email cố định bên dưới, mật khẩu chính
 // là "mã quản trị" mà bạn sẽ gõ khi bấm nút Admin. Đổi cả hai theo ý bạn,
@@ -70,6 +82,12 @@ function ensureFirebaseAuth() {
     });
   });
   return _authReadyPromise;
+}
+// Resolves this device's Firebase Auth uid (anonymous is fine) — used to
+// stamp/verify ownership of self-serve hosted polls (creatorUid).
+async function getMyAuthUid() {
+  const user = await ensureFirebaseAuth();
+  return user ? user.uid : null;
 }
 
 function fbReady() {
@@ -153,6 +171,15 @@ function getDeviceId() {
     ss("hl_device_id", id);
   }
   return id;
+}
+// If this device has claimed someone else's existing vote entry as "me" for
+// a given poll (see resolveVoterIdentity — used when two devices enter the
+// same name), all reads/writes for that poll should target THAT entry
+// instead of this device's own raw devId, so the two devices share one
+// identity instead of appearing as two separate people with the same name.
+function effectiveDevId(pid) {
+  const adopted = ls("hl_adopted_id_" + pid);
+  return adopted && typeof adopted === "string" ? adopted : getDeviceId();
 }
 
 // ─── STATE ────────────────────────────────────────────────────────
@@ -444,7 +471,7 @@ function syncSessionCostToPoll(session) {
     .filter((m) => m.paid)
     .reduce((s, m) => s + m.amount, 0);
   fdb
-    .ref("polls/" + session.pollId + "/sessionCost")
+    .ref(POLLS_ROOT + "/" + session.pollId + "/sessionCost")
     .set({
       sessionId: session.id,
       date: session.date,
@@ -462,7 +489,7 @@ function syncSessionCostToPoll(session) {
 function clearPollSessionCost(pollId) {
   if (!pollId || !fbReady()) return;
   fdb
-    .ref("polls/" + pollId + "/sessionCost")
+    .ref(POLLS_ROOT + "/" + pollId + "/sessionCost")
     .remove()
     .catch((err) => console.error("Clear poll session cost failed", err));
 }
@@ -2075,6 +2102,19 @@ const OPTION_PALETTE = [
 function optColor(i) {
   return OPTION_PALETTE[i % OPTION_PALETTE.length];
 }
+// Every member gets ONE fixed color derived from their name (hashed into
+// OPTION_PALETTE), so the same person always looks the same everywhere —
+// avatar stacks, name chips, Participants tab — instead of picking up
+// whichever option/group's color they happen to be listed under.
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+function avatarToneFor(v) {
+  const key = String((v && (v.nameKey || v.name)) || "");
+  return OPTION_PALETTE[hashStr(key) % OPTION_PALETTE.length];
+}
 // Options for a given poll, falling back to the defaults for old polls
 // created before this feature (which have no `options` field saved).
 // `options` may be a plain array (admin create/edit) or a keyed object
@@ -2183,7 +2223,7 @@ async function listenPolls() {
   if (pollsListenerOn || !fbReady()) return;
   pollsListenerOn = true;
   await ensureFirebaseAuth();
-  fdb.ref("polls").on(
+  fdb.ref(POLLS_ROOT).on(
     "value",
     (snap) => {
       pollsCache = snap.val() || {};
@@ -2225,7 +2265,7 @@ function createPoll() {
   if (editingPollId) {
     // Editing an existing poll: update date/note/options, keep all votes as-is
     fdb
-      .ref("polls/" + editingPollId)
+      .ref(POLLS_ROOT + "/" + editingPollId)
       .update({ date, note, address, mapsUrl, organizer, options })
       .then(() => {
         showToast("Vote updated ✏️");
@@ -2240,7 +2280,7 @@ function createPoll() {
     return;
   }
 
-  const ref = fdb.ref("polls").push();
+  const ref = fdb.ref(POLLS_ROOT).push();
   ref
     .set({
       date,
@@ -2325,12 +2365,33 @@ function copyPollLink(pid, silent) {
     prompt("Copy vote link:", url);
   }
 }
+// Self-serve hosting: link a creator uses to edit/close/delete their OWN
+// vote later (see initHostManageView). Different from pollLink, which is
+// the link members use to actually vote.
+function manageLink(pid) {
+  return location.origin + location.pathname + "?manage=" + pid;
+}
+function copyManageLink(pid, silent) {
+  const url = manageLink(pid);
+  const done = () =>
+    showToast(
+      silent ? "Manage link copied 📋 — save it somewhere safe!" : "Link copied 📋",
+    );
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard
+      .writeText(url)
+      .then(done)
+      .catch(() => prompt("Copy manage link:", url));
+  } else {
+    prompt("Copy manage link:", url);
+  }
+}
 
 function togglePollStatus(pid) {
   const p = pollsCache[pid];
   if (!p || !fbReady()) return;
   fdb
-    .ref("polls/" + pid + "/status")
+    .ref(POLLS_ROOT + "/" + pid + "/status")
     .set(p.status === "open" ? "closed" : "open");
 }
 async function deletePoll(pid) {
@@ -2344,7 +2405,7 @@ async function deletePoll(pid) {
   )
     return;
   fdb
-    .ref("polls/" + pid)
+    .ref(POLLS_ROOT + "/" + pid)
     .remove()
     .then(() => showToast("Vote deleted"));
 }
@@ -2386,7 +2447,7 @@ function clearPollLog(pid) {
   }).then((ok) => {
     if (!ok) return;
     fdb
-      .ref("polls/" + pid + "/logs")
+      .ref(POLLS_ROOT + "/" + pid + "/logs")
       .remove()
       .then(() => showToast("Activity log cleared 🧹"))
       .catch((err) => {
@@ -2428,7 +2489,7 @@ async function removePollVoterByName(pid) {
   if (!ok) return;
   Promise.all(
     matches.map(([devId]) =>
-      fdb.ref("polls/" + pid + "/votes/" + devId).remove(),
+      fdb.ref(POLLS_ROOT + "/" + pid + "/votes/" + devId).remove(),
     ),
   )
     .then(() => showToast("Voter removed 🗑"))
@@ -2487,7 +2548,7 @@ async function renamePollVoter(pid) {
   Promise.all(
     matches.map(([devId]) =>
       fdb
-        .ref("polls/" + pid + "/votes/" + devId)
+        .ref(POLLS_ROOT + "/" + pid + "/votes/" + devId)
         .update({ name: cleanNew, nameKey: nameKey(cleanNew) }),
     ),
   )
@@ -2530,7 +2591,7 @@ function renderPollList() {
           .map(
             (g) => `
           <div style="font-size:11px;font-weight:600;color:${g.tone.text};margin:8px 0 4px">${esc(g.label)} (${g.votes.length})</div>
-          <div>${g.votes.length ? g.votes.map((v) => `<span class="vote-chip" style="background:${g.tone.bg};border-color:${g.tone.border};color:${g.tone.text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("") : '<span style="font-size:12px;color:var(--hint)">No one yet</span>'}</div>`,
+          <div>${g.votes.length ? g.votes.map((v) => `<span class="vote-chip" style="background:${avatarToneFor(v).bg};border-color:${avatarToneFor(v).border};color:${avatarToneFor(v).text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("") : '<span style="font-size:12px;color:var(--hint)">No one yet</span>'}</div>`,
           )
           .join("")}
       </div>`;
@@ -2667,7 +2728,7 @@ async function initVoterView(pid) {
   // đây chính là nguyên nhân member thường bị mất khả năng vote sau khi bật
   // Firebase Auth.
   await ensureFirebaseAuth();
-  fdb.ref("polls/" + pid).on(
+  fdb.ref(POLLS_ROOT + "/" + pid).on(
     "value",
     (snap) => {
       voterPoll = snap.val();
@@ -2682,13 +2743,326 @@ async function initVoterView(pid) {
     },
   );
 }
-// If an admin renames this device's own vote entry (see renamePollVoter),
-// the server's `name` is now the source of truth for this device. Without
-// this, the device's cached "locked name" would stay stale and silently
+// ─── SELF-SERVE HOSTING: anyone can create + manage their own vote ────
+// Creating happens in a lightweight MODAL (no page navigation) — reached by
+// tapping "+ Create your own vote" on the public vote page. Managing an
+// existing vote later still uses a dedicated page (?manage=<pollId>), since
+// that's a link the host bookmarks/saves for repeat visits.
+// Ownership is the creator's own Firebase Auth uid (anonymous is fine),
+// stamped as `creatorUid` on the poll at creation and checked both by
+// Firebase Rules (server-side) and here (so a stranger with the manage link
+// just sees a polite "no permission" instead of a form).
+function hcSetView(title) {
+  document.body.classList.add("host-mode");
+  const t = document.getElementById("host-view-title");
+  if (t) t.textContent = title;
+}
+// Recovery net for "I lost my manage link": every poll this device created
+// (see submitHostCreatePollModal) has its id remembered in hl_my_hosted_polls,
+// so this device can always find its way back — but ONLY from the same
+// browser/device. If someone clears site data, switches devices, or never
+// opens it again after creating, there's no login to fall back on, so
+// there's genuinely no way to recover it; they'd need a fresh vote made for
+// them (by another host, or by the admin).
+async function openMyHostedVotesModal() {
+  document.getElementById("hc-modal-title").textContent = "My hosted votes";
+  document.getElementById("hc-modal-copy-icon").innerHTML = "";
+  document.getElementById("hc-modal-footer").innerHTML = "";
+  openModal("modal-host-create");
+  const body = document.getElementById("hc-modal-body");
+  if (!fbReady()) {
+    body.innerHTML =
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ The vote system isn\'t configured yet.</div>';
+    return;
+  }
+  const mine = ls("hl_my_hosted_polls") || [];
+  if (mine.length === 0) {
+    body.innerHTML =
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0;line-height:1.6">No hosted votes found on this device.<br>This list only remembers votes created from this exact browser. If you cleared your browser data, switched devices, or never saved the manage link, this can\'t recover it — you\'d need someone to create a fresh vote for the group.</div>';
+    return;
+  }
+  // A shared device may have been used to host votes under several names —
+  // ask which name to filter by, so people don't see each other's votes.
+  body.innerHTML = `
+    <div style="margin-bottom:10px">
+      <label class="field-label">Your name</label>
+      <input type="text" id="mhv-name" placeholder="Name you hosted under" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}" onkeydown="if(event.key==='Enter'){loadMyHostedVotes();}">
+    </div>
+    <button class="vv-vote-btn" onclick="loadMyHostedVotes()">Show my votes</button>
+  `;
+}
+function loadMyHostedVotes() {
+  const name = (document.getElementById("mhv-name").value || "").trim();
+  if (!name) {
+    showToast("Please enter the name you hosted under");
+    return;
+  }
+  const key = nameKey(name);
+  const body = document.getElementById("hc-modal-body");
+  const mine = ls("hl_my_hosted_polls") || [];
+  body.innerHTML =
+    '<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Loading…</div>';
+  ensureFirebaseAuth().then(() => {
+    Promise.all(
+      mine.map((pid) =>
+        fdb
+          .ref(POLLS_ROOT + "/" + pid)
+          .once("value")
+          .then((s) => [pid, s.val()])
+          .catch(() => [pid, null]),
+      ),
+    ).then((results) => {
+      const rows = results
+        .filter(([, p]) => p && nameKey(p.organizer) === key)
+        .map(
+          ([pid, p]) => `
+        <div class="player-item" style="margin-bottom:8px;cursor:pointer" onclick="closeModal('modal-host-create');location.href='?manage=${pid}'">
+          <div style="flex:1">
+            <div class="pi-name">${esc(p.note || "Untitled vote")}</div>
+            <div class="pi-detail">${esc(fmtDate(p.date))} · ${p.status === "open" ? "Open" : "Closed"}</div>
+          </div>
+        </div>`,
+        )
+        .join("");
+      body.innerHTML =
+        rows ||
+        `<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No votes hosted under "${esc(name)}" found on this device.</div>`;
+    });
+  });
+}
+async function openHostCreateModal() {
+  document.getElementById("hc-modal-title").textContent =
+    "Create your own vote";
+  document.getElementById("hc-modal-copy-icon").innerHTML = "";
+  openModal("modal-host-create");
+  const body = document.getElementById("hc-modal-body");
+  body.innerHTML =
+    '<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Loading…</div>';
+  document.getElementById("hc-modal-footer").innerHTML = "";
+  if (!fbReady()) {
+    body.innerHTML =
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ The vote system isn\'t configured yet.</div>';
+    return;
+  }
+  await ensureFirebaseAuth();
+  renderHostCreateModalForm();
+}
+function renderHostCreateModalForm() {
+  tempPollOptions = DEFAULT_POLL_OPTIONS.map((o) => ({ ...o }));
+  const body = document.getElementById("hc-modal-body");
+  body.innerHTML = `
+    <div style="margin-bottom:14px">
+      <label class="field-label">Vote title</label>
+      <input type="text" id="hc-title" placeholder="E.g.: Weekend badminton, Dinner plan…" maxlength="60">
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:14px">
+      <div style="flex:1">
+        <label class="field-label">Your name</label>
+        <input type="text" id="hc-name" placeholder="Who's hosting" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}">
+      </div>
+      <div style="flex:1">
+        <label class="field-label">Date</label>
+        <input type="date" id="hc-date" value="${new Date().toISOString().slice(0, 10)}">
+      </div>
+    </div>
+    <div>
+      <label class="field-label">Options</label>
+      <div id="vp-options"></div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input type="text" id="vp-new-option-label" placeholder="Add an option…" style="flex:1" onkeydown="if(event.key==='Enter'){addPollOption();}">
+        <button class="btn btn-ghost btn-sm" onclick="addPollOption()">+ Add</button>
+      </div>
+    </div>
+  `;
+  renderPollOptionsEditor();
+  document.getElementById("hc-modal-footer").innerHTML = `
+    <button class="btn btn-ghost" onclick="closeModal('modal-host-create')">Cancel</button>
+    <button class="btn btn-primary" onclick="submitHostCreatePollModal()">Create</button>
+  `;
+}
+async function submitHostCreatePollModal() {
+  const name = (document.getElementById("hc-name").value || "").trim();
+  const title = (document.getElementById("hc-title").value || "").trim();
+  const date = document.getElementById("hc-date").value;
+  if (!name) {
+    showToast("Please enter your name");
+    return;
+  }
+  if (isNameBlocked(name)) {
+    showToast("Invalid name");
+    return;
+  }
+  if (!title) {
+    showToast("Please enter a vote title");
+    return;
+  }
+  if (!date) {
+    showToast("Please pick a date");
+    return;
+  }
+  const options = tempPollOptions
+    .map((o) => ({ id: o.id, label: o.label.trim() }))
+    .filter((o) => o.label);
+  if (options.length === 0) {
+    showToast("Add at least 1 vote option");
+    return;
+  }
+  const uidVal = await getMyAuthUid();
+  if (!uidVal) {
+    showToast("Couldn't connect — please try again");
+    return;
+  }
+  ss("hl_voter_locked_name", name);
+  const ref = fdb.ref(POLLS_ROOT).push();
+  ref
+    .set({
+      date,
+      note: title,
+      organizer: name,
+      options,
+      status: "open",
+      createdAt: Date.now(),
+      creatorUid: uidVal,
+    })
+    .then(() => {
+      const mine = ls("hl_my_hosted_polls") || [];
+      if (!mine.includes(ref.key)) {
+        mine.push(ref.key);
+        ss("hl_my_hosted_polls", mine);
+      }
+      renderHostCreateModalSuccess(ref.key);
+    })
+    .catch((err) => {
+      console.error(err);
+      showToast(
+        "Error: " + (err && err.message ? err.message : "couldn't connect"),
+      );
+    });
+}
+function renderHostCreateModalSuccess(pid) {
+  document.getElementById("hc-modal-title").textContent = "Vote created 🎉";
+  // The copy-link icon requested "up in the corner" — sits in the modal
+  // header next to the × close button, copies the main voting link.
+  document.getElementById("hc-modal-copy-icon").innerHTML =
+    `<button class="btn-icon" onclick="copyPollLink('${pid}')" title="Copy voting link" style="font-size:15px">📋</button>`;
+  const body = document.getElementById("hc-modal-body");
+  body.innerHTML = `
+    <div style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:16px">Share the first link so people can vote. Save the second one for yourself — it's the only way to edit, close, or delete this vote later.</div>
+    <div style="margin-bottom:14px">
+      <label class="field-label">🔗 Voting link (share this)</label>
+      <div style="display:flex;gap:6px">
+        <input type="text" readonly value="${esc(pollLink(pid))}" style="flex:1;font-size:12px" onclick="this.select()">
+        <button class="btn btn-ghost btn-sm" onclick="copyPollLink('${pid}')">Copy</button>
+      </div>
+    </div>
+    <div>
+      <label class="field-label">🔑 Manage link (keep this private!)</label>
+      <div style="display:flex;gap:6px">
+        <input type="text" readonly value="${esc(manageLink(pid))}" style="flex:1;font-size:12px" onclick="this.select()">
+        <button class="btn btn-ghost btn-sm" onclick="copyManageLink('${pid}',true)">Copy</button>
+      </div>
+    </div>
+  `;
+  document.getElementById("hc-modal-footer").innerHTML =
+    `<button class="btn btn-primary" onclick="closeModal('modal-host-create');location.href='?poll=${pid}'">View vote page</button>`;
+}
+async function initHostManageView(pid) {
+  hcSetView("Manage your vote");
+  const body = document.getElementById("host-body");
+  if (!fbReady()) {
+    body.innerHTML =
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ The vote system isn\'t configured yet.</div>';
+    return;
+  }
+  await ensureFirebaseAuth();
+  const myUid = await getMyAuthUid();
+  fdb.ref(POLLS_ROOT + "/" + pid).on(
+    "value",
+    (snap) => {
+      const p = snap.val();
+      if (!p) {
+        body.innerHTML =
+          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px">This vote no longer exists.</div>';
+        return;
+      }
+      pollsCache[pid] = p; // so togglePollStatus/deletePoll/clearPollLog/etc. (read pollsCache) work unmodified
+      if (!myUid || p.creatorUid !== myUid) {
+        body.innerHTML =
+          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px;line-height:1.6">🔒 You don\'t have permission to manage this vote.<br>Only the device that created it can edit it here — ask whoever created it to use their own manage link.</div>';
+        return;
+      }
+      renderHostManageForm(pid, p);
+    },
+    (err) => {
+      console.error(err);
+      body.innerHTML =
+        '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load this vote. Please try again later.</div>';
+    },
+  );
+}
+function renderHostManageForm(pid, p) {
+  const body = document.getElementById("host-body");
+  tempPollOptions = pollOptions(p).map((o) => ({ ...o }));
+  body.innerHTML = `
+    <div style="margin-bottom:14px">
+      <label class="field-label">Vote title</label>
+      <input type="text" id="hm-title" maxlength="60" value="${esc(p.note || "")}">
+    </div>
+    <div style="margin-bottom:14px">
+      <label class="field-label">Date</label>
+      <input type="date" id="hm-date" value="${esc(p.date || "")}">
+    </div>
+    <div style="margin-bottom:16px">
+      <label class="field-label">Options</label>
+      <div id="vp-options"></div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input type="text" id="vp-new-option-label" placeholder="Add an option…" style="flex:1" onkeydown="if(event.key==='Enter'){addPollOption();}">
+        <button class="btn btn-ghost btn-sm" onclick="addPollOption()">+ Add</button>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <button class="btn btn-ghost" onclick="togglePollStatus('${pid}')">${p.status === "open" ? "Close vote" : "Reopen vote"}</button>
+      <button class="btn btn-primary" style="background:var(--blue);border-color:var(--blue)" onclick="saveHostPollEdits('${pid}')">Save changes</button>
+    </div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      <label class="field-label">Voting link (share with your group)</label>
+      <div style="display:flex;gap:6px">
+        <input type="text" readonly value="${esc(pollLink(pid))}" style="flex:1;font-size:12px" onclick="this.select()">
+        <button class="btn btn-ghost btn-sm" onclick="copyPollLink('${pid}')">Copy</button>
+      </div>
+    </div>
+  `;
+  renderPollOptionsEditor();
+}
+function saveHostPollEdits(pid) {
+  const title = (document.getElementById("hm-title").value || "").trim();
+  const date = document.getElementById("hm-date").value;
+  if (!date) {
+    showToast("Please pick a date");
+    return;
+  }
+  const options = tempPollOptions
+    .map((o) => ({ id: o.id, label: o.label.trim() }))
+    .filter((o) => o.label);
+  if (options.length === 0) {
+    showToast("Add at least 1 vote option");
+    return;
+  }
+  fdb
+    .ref(POLLS_ROOT + "/" + pid)
+    .update({ note: title, date, options })
+    .then(() => showToast("Saved ✏️"))
+    .catch((err) => {
+      console.error(err);
+      showToast(
+        "Error: " + (err && err.message ? err.message : "couldn't connect"),
+      );
+    });
+}
 // overwrite the admin's rename right back on the voter's next Submit tap.
 function syncLockedNameFromServer(poll) {
   if (!poll || !poll.votes) return;
-  const serverEntry = poll.votes[getDeviceId()];
+  const serverEntry = poll.votes[effectiveDevId(voterPid)];
   if (!serverEntry || !serverEntry.name) return;
   const local = (ls("hl_voter_locked_name") || "").trim();
   if (serverEntry.name !== local) {
@@ -2711,7 +3085,7 @@ function pollLogs(p) {
 function logVoteEvent(pid, name, action) {
   if (!fbReady() || !pid) return;
   fdb
-    .ref("polls/" + pid + "/logs")
+    .ref(POLLS_ROOT + "/" + pid + "/logs")
     .push()
     .set({ name: name || "Someone", action, at: Date.now() })
     .catch((err) => console.error("Log write failed", err));
@@ -2724,7 +3098,7 @@ function logVoteChangeEvent(pid, name, added, removed) {
   if (!fbReady() || !pid) return;
   if ((!added || !added.length) && (!removed || !removed.length)) return;
   fdb
-    .ref("polls/" + pid + "/logs")
+    .ref(POLLS_ROOT + "/" + pid + "/logs")
     .push()
     .set({
       name: name || "Someone",
@@ -2850,9 +3224,9 @@ function migrateLegacyVote(pid, p) {
   if (!legacy) return;
   migratedLegacyVotePolls.add(pid);
   fdb
-    .ref("polls/" + pid + "/votes/" + devId)
+    .ref(POLLS_ROOT + "/" + pid + "/votes/" + devId)
     .set({ ...legacy, nameKey: oldKey })
-    .then(() => fdb.ref("polls/" + pid + "/votes/" + oldKey).remove())
+    .then(() => fdb.ref(POLLS_ROOT + "/" + pid + "/votes/" + oldKey).remove())
     .catch((err) => console.error("Migrate legacy vote failed", err));
 }
 
@@ -2868,7 +3242,7 @@ async function initVoterLatest() {
   }
   await ensureFirebaseAuth();
   fdb
-    .ref("polls")
+    .ref(POLLS_ROOT)
     .orderByChild("createdAt")
     .limitToLast(10)
     .on(
@@ -3130,14 +3504,14 @@ async function adminLogin() {
   }
 }
 
-function avatarStack(arr, tone) {
+function avatarStack(arr) {
   const shown = arr.slice(0, 3);
   const more = arr.length - shown.length;
   return `<span class="av-stack">${shown
     .map((v) =>
       v.avatar
         ? `<span class="av" style="padding:0;overflow:hidden"><img src="${v.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></span>`
-        : `<span class="av" style="background:${tone.solid}">${esc(initials(v.name))}</span>`,
+        : `<span class="av" style="background:${avatarToneFor(v).solid}">${esc(initials(v.name))}</span>`,
     )
     .join(
       "",
@@ -3165,11 +3539,11 @@ function fbOptRow(group, myChoices, open) {
       <span class="fb-check">${sel ? "✓" : ""}</span>
       <div style="flex:1;font-size:15px;font-weight:500">${esc(label)}</div>
       <div onclick="event.stopPropagation();toggleVvList('${id}')" style="display:flex;align-items:center;gap:7px;padding:2px 4px">
-        ${votes.length ? avatarStack(votes, tone) : ""}
+        ${votes.length ? avatarStack(votes) : ""}
         <span style="font-size:13px;color:var(--muted);font-weight:600">${votes.length}</span>
       </div>
     </div>
-    ${expanded && votes.length ? `<div class="fb-opt-names">${votes.map((v) => `<span class="vote-chip" style="background:${tone.bg};border-color:${tone.border};color:${tone.text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("")}</div>` : ""}`;
+    ${expanded && votes.length ? `<div class="fb-opt-names">${votes.map((v) => `<span class="vote-chip" style="background:${avatarToneFor(v).bg};border-color:${avatarToneFor(v).border};color:${avatarToneFor(v).text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("")}</div>` : ""}`;
 }
 
 let vvActiveTab = "info"; // 'info' | 'details' (=Vote) | 'participants' | 'payment'
@@ -3364,18 +3738,8 @@ function renderParticipantsTab(p, groups) {
     return extra;
   };
 
-  // Each member gets one fixed avatar color derived from their name, so the
-  // same person looks the same across every option group instead of picking
-  // up that group's color (previously used g.tone, which changed per group).
-  const hashStr = (s) => {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-    return h;
-  };
-  const avatarToneFor = (v) => {
-    const key = String((v && (v.nameKey || v.name)) || "");
-    return OPTION_PALETTE[hashStr(key) % OPTION_PALETTE.length];
-  };
+  // (hashStr / avatarToneFor are defined globally now, shared with the Vote
+  // tab's avatarStack/name chips — see near OPTION_PALETTE.)
 
   const renderAvatarCell = (v, extra, absent) => {
     const tone = avatarToneFor(v);
@@ -3531,13 +3895,13 @@ function fbOptSummaryRow(group, totalMembers) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
         <div style="font-size:16px;font-weight:600">${esc(label)}</div>
         <div style="display:flex;align-items:center;gap:7px">
-          ${votes.length ? avatarStack(votes, tone) : ""}
+          ${votes.length ? avatarStack(votes) : ""}
         </div>
       </div>
       <div style="height:8px;border-radius:5px;background:var(--border);overflow:hidden">
         <div style="height:100%;border-radius:5px;width:${pct}%;background:var(--blue)"></div>
       </div>
-      ${expanded && votes.length ? `<div class="fb-opt-names" style="margin-top:8px">${votes.map((v) => `<span class="vote-chip" style="background:${tone.bg};border-color:${tone.border};color:${tone.text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("")}</div>` : ""}
+      ${expanded && votes.length ? `<div class="fb-opt-names" style="margin-top:8px">${votes.map((v) => `<span class="vote-chip" style="background:${avatarToneFor(v).bg};border-color:${avatarToneFor(v).border};color:${avatarToneFor(v).text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("")}</div>` : ""}
     </div>`;
 }
 
@@ -3665,7 +4029,7 @@ function addVoterOption() {
     showToast("Invalid name");
     return;
   }
-  const ref = fdb.ref("polls/" + voterPid + "/options").push();
+  const ref = fdb.ref(POLLS_ROOT + "/" + voterPid + "/options").push();
   ref
     .set({ id: ref.key, label, addedBy: voterName, at: Date.now() })
     .then(() => {
@@ -3712,16 +4076,17 @@ async function resetVoterName() {
     showToast("Invalid name");
     return;
   }
+  if (!(await resolveVoterIdentity(trimmed))) return;
   try {
     ss("hl_voter_locked_name", trimmed);
   } catch {}
   // Update the name directly on this device's existing vote entry (if any) —
   // no need to reselect options or submit again, the choices stay as-is.
-  const devId = getDeviceId();
+  const devId = effectiveDevId(voterPid);
   const existing = voterPoll && voterPoll.votes && voterPoll.votes[devId];
   if (existing && voterPid && fdb) {
     fdb
-      .ref("polls/" + voterPid + "/votes/" + devId)
+      .ref(POLLS_ROOT + "/" + voterPid + "/votes/" + devId)
       .update({ name: trimmed, nameKey: nameKey(trimmed) })
       .then(() => {
         showToast("Name updated");
@@ -3760,13 +4125,38 @@ function getMyVoteEntry() {
   const lockedName = (ls("hl_voter_locked_name") || "").trim();
   const curInput = document.getElementById("vv-name");
   const nameVal = lockedName ? lockedName : curInput ? curInput.value : "";
-  const myDevId = getDeviceId();
+  const myDevId = effectiveDevId(voterPid);
   const legacyKey = nameVal.trim() ? nameKey(nameVal) : null;
   return (
     (voterPoll.votes && voterPoll.votes[myDevId]) ||
     (legacyKey && voterPoll.votes && voterPoll.votes[legacyKey]) ||
     null
   );
+}
+// Called right before a name is locked in for the first time on this device.
+// If that name already belongs to a DIFFERENT device on this poll, ask
+// whether that's actually the same person — if confirmed, this device
+// "becomes" that existing entry (same choices, same everything) instead of
+// creating a second, duplicate-named voter. Returns true to proceed with the
+// name as-is, false to abort (caller should not lock the name yet).
+async function resolveVoterIdentity(name) {
+  const myDevId = getDeviceId();
+  const votes = (voterPoll && voterPoll.votes) || {};
+  const key = nameKey(name);
+  const dup = Object.entries(votes).find(
+    ([devId, v]) => devId !== myDevId && nameKey(v.name) === key,
+  );
+  if (!dup) return true;
+  const takeOver = await showConfirm({
+    title: "Name already used",
+    tone: "info",
+    message: `"${name}" is already used by another voter on this poll. If that's you, we'll use their existing selections instead of creating a duplicate "${name}". Continue as the same person?`,
+    yesText: "Yes, that's me",
+    noText: "Pick another name",
+  });
+  if (!takeOver) return false;
+  ss("hl_adopted_id_" + voterPid, dup[0]);
+  return true;
 }
 // (Re)seeds the pending-selection state from the committed server vote —
 // only when we don't have one yet, or we've switched to a different poll.
@@ -3778,7 +4168,7 @@ function ensurePendingChoices(pid, committed) {
     vvPendingBasePid = pid;
   }
 }
-function toggleVote(optionId) {
+async function toggleVote(optionId) {
   if (!voterPoll || voterPoll.status !== "open") {
     showToast("This vote is closed");
     return;
@@ -3796,6 +4186,7 @@ function toggleVote(optionId) {
       showToast("Invalid name");
       return;
     }
+    if (!(await resolveVoterIdentity(name))) return;
     // Lock the name to this device on first tap — prevents voting on someone else's behalf
     ss("hl_voter_locked_name", name);
   }
@@ -3806,7 +4197,7 @@ function toggleVote(optionId) {
 }
 // Locks in the pending selection — this is the actual "vote attempt" that
 // counts toward the 4-free / growing-delay throttle.
-function confirmVote() {
+async function confirmVote() {
   if (!voterPoll || voterPoll.status !== "open") {
     showToast("This vote is closed");
     return;
@@ -3831,6 +4222,7 @@ function confirmVote() {
       showToast("Invalid name");
       return;
     }
+    if (!(await resolveVoterIdentity(name))) return;
     ss("hl_voter_locked_name", name);
   }
   const choices = Array.from(vvPendingChoices);
@@ -3866,7 +4258,7 @@ function confirmVote() {
   }
 }
 function submitVote(choices, name) {
-  const devId = getDeviceId();
+  const devId = effectiveDevId(voterPid);
   const existing = (voterPoll.votes && voterPoll.votes[devId]) || null;
   const previous = voteChoices(existing);
   // Keep whatever avatar is already on this vote entry; if none yet, fall back to
@@ -3875,7 +4267,7 @@ function submitVote(choices, name) {
   // Votes are keyed by deviceId (fixed, doesn't change when the name is changed) →
   // each device only ever has 1 vote record per poll, no matter how many times "Not you?" is used.
   fdb
-    .ref("polls/" + voterPid + "/votes/" + devId)
+    .ref(POLLS_ROOT + "/" + voterPid + "/votes/" + devId)
     .set({ name, choices, at: Date.now(), nameKey: nameKey(name), avatar })
     .then(() => {
       const optsAll = pollOptions(voterPoll);
@@ -3966,10 +4358,10 @@ async function onVoterAvatarSelected(inputEl) {
     ss("hl_voter_avatar", dataUrl); // cached locally so future polls reuse it automatically
     const lockedName = (ls("hl_voter_locked_name") || "").trim();
     if (voterPid && fbReady() && lockedName) {
-      const devId = getDeviceId();
+      const devId = effectiveDevId(voterPid);
       const existing =
         (voterPoll && voterPoll.votes && voterPoll.votes[devId]) || null;
-      await fdb.ref("polls/" + voterPid + "/votes/" + devId).set({
+      await fdb.ref(POLLS_ROOT + "/" + voterPid + "/votes/" + devId).set({
         name: lockedName,
         choices: voteChoices(existing),
         at: existing ? existing.at || Date.now() : Date.now(),
@@ -3991,12 +4383,12 @@ async function removeVoterAvatar() {
   } catch {}
   const lockedName = (ls("hl_voter_locked_name") || "").trim();
   if (voterPid && fbReady() && lockedName) {
-    const devId = getDeviceId();
+    const devId = effectiveDevId(voterPid);
     const existing =
       (voterPoll && voterPoll.votes && voterPoll.votes[devId]) || null;
     if (existing) {
       await fdb
-        .ref("polls/" + voterPid + "/votes/" + devId + "/avatar")
+        .ref(POLLS_ROOT + "/" + voterPid + "/votes/" + devId + "/avatar")
         .remove();
     }
   }
@@ -4038,6 +4430,11 @@ renderSessions();
     }
     // Wrong/locked/banned attempts via URL are ignored silently (same as before) —
     // the lockout record is still updated by evaluateAdminAttempt() either way.
+  }
+  const managePid = params.get("manage");
+  if (managePid) {
+    initHostManageView(managePid);
+    return;
   }
   const pid = new URLSearchParams(location.search).get("poll");
   const isAdmin = !!ls("hl_admin");
