@@ -2901,7 +2901,7 @@ async function openMyHostedVotesModal() {
   const mine = ls("hl_my_hosted_polls") || [];
   if (mine.length === 0) {
     body.innerHTML =
-      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0;line-height:1.6">No hosted votes found on this device.<br>This list only remembers votes created from this exact browser. If you cleared your browser data, switched devices, or never saved the manage link, this can\'t recover it — you\'d need someone to create a fresh vote for the group.</div>';
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No hosted votes found on this device.</div>';
     return;
   }
   // A shared device may have been used to host votes under several names —
