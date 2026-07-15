@@ -184,11 +184,14 @@ function effectiveDevId(pid) {
 
 // ─── STATE ────────────────────────────────────────────────────────
 let members = ls("hl_members") || []; // [{id,name}]
-let sessions = ls("hl_sessions") || []; // [{id,date,note,address,costs:[{id,name,emoji,amount,memberIds[]}],members:[{id,name,paid}]}]
+let sessions = ls("hl_sessions") || []; // [{id,date,note,address,costs:[{id,name,emoji,amount,memberIds[]}],members:[{id,name,paid,guestCount}]}]
+// guestCount: number of extra people this member is bringing/paying for,
+// folded into their own row instead of being split into separate members
+// (see memberWeight/calcMemberAmount and guestStepperHtml/guestSuffix).
 let monthCollapseState = ls("hl_month_collapse") || {}; // { 'YYYY-MM': true/false } — remembers user's expand/collapse choice
 let editingSessionId = null;
 let tempCosts = []; // cost lines in modal
-let tempMembers = []; // members in modal [{id,name,included}]
+let tempMembers = []; // members in modal [{id,name,included,guestCount}]
 let tempSessionPollLink = null; // pollId to attach to the NEXT newly-created session (set by createSessionFromPoll)
 
 // ─── HELPERS ──────────────────────────────────────────────────────
@@ -424,12 +427,25 @@ function memberStats(mid) {
 }
 
 // ─── COST AMOUNT CALC ─────────────────────────────────────────────
+// A member can carry "guests" (bringing +N extra people) WITHOUT being split
+// into separate member entries — instead their guestCount just increases
+// their own weight in the cost split (a member with 1 guest pays for ~2
+// people's worth of court/water/shuttle, while still showing as a single
+// avatar with a "+1" badge — see renderGuestBadge / renderModalMembers).
+function memberWeight(session, memberId) {
+  const sm = session.members.find((m) => m.id === memberId);
+  return 1 + (sm && sm.guestCount ? sm.guestCount : 0);
+}
 function calcMemberAmount(session, memberId) {
   let total = 0;
+  const myWeight = memberWeight(session, memberId);
   session.costs.forEach((c) => {
     if (c.memberIds.includes(memberId)) {
-      const count = c.memberIds.length;
-      if (count > 0) total += c.amount / count;
+      const totalWeight = c.memberIds.reduce(
+        (sum, id) => sum + memberWeight(session, id),
+        0,
+      );
+      if (totalWeight > 0) total += (c.amount * myWeight) / totalWeight;
     }
   });
   return Math.ceil(total / 1000) * 1000;
@@ -727,7 +743,7 @@ function openNewSession() {
   document.getElementById("ms-address").value = "";
   document.getElementById("ms-maps-link").value = "";
   // All members included; fixed always pre-checked in costs
-  tempMembers = members.map((m) => ({ ...m, included: true }));
+  tempMembers = members.map((m) => ({ ...m, included: true, guestCount: 0 }));
   tempCosts = COST_PRESETS.map((p) => ({
     id: uid(),
     name: p.name,
@@ -767,7 +783,12 @@ function openEditSession(sid) {
     const gm = members.find((m) => m.id === id);
     const sm = s.members.find((m) => m.id === id);
     const name = gm ? gm.name : sm ? sm.name : "";
-    tempMembers.push({ id, name, included: savedIds.includes(id) });
+    tempMembers.push({
+      id,
+      name,
+      included: savedIds.includes(id),
+      guestCount: sm && sm.guestCount ? sm.guestCount : 0,
+    });
   });
   renderCostLines();
   renderModalMembers();
@@ -882,6 +903,23 @@ function toggleAllCostMembers(cid) {
   renderCostLines();
 }
 
+// Small "+N" stepper for a member's guestCount — lets a member bring N extra
+// people (e.g. a guest they're paying for) WITHOUT that guest becoming a
+// separate member entry. Cost splitting weighs this member up accordingly.
+function guestStepperHtml(m) {
+  const n = m.guestCount || 0;
+  return `<span style="display:inline-flex;align-items:center;gap:3px;flex-shrink:0" title="Guests this member is bringing (folded into their own cost share)">
+    <button type="button" class="btn-icon" style="width:20px;height:20px;font-size:12px" onclick="changeGuestCount('${m.id}',-1)">−</button>
+    <span class="badge-pill badge-blue" style="min-width:26px;text-align:center;font-size:10px">+${n}</span>
+    <button type="button" class="btn-icon" style="width:20px;height:20px;font-size:12px" onclick="changeGuestCount('${m.id}',1)">+</button>
+  </span>`;
+}
+function changeGuestCount(mid, delta) {
+  const m = tempMembers.find((x) => x.id === mid);
+  if (!m) return;
+  m.guestCount = Math.max(0, (m.guestCount || 0) + delta);
+  renderModalMembers();
+}
 function renderModalMembers() {
   const wrap = document.getElementById("ms-members");
   if (tempMembers.length === 0) {
@@ -900,6 +938,7 @@ function renderModalMembers() {
       <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
         <input type="checkbox" checked disabled style="width:auto;opacity:.5;cursor:not-allowed">
         <label style="font-size:13px;font-weight:500;flex:1;color:var(--text)">${esc(m.name)}</label>
+        ${guestStepperHtml(m)}
         <span style="font-size:10px;color:var(--amber)">⭐</span>
       </div>`,
       )
@@ -913,6 +952,7 @@ function renderModalMembers() {
       <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
         <input type="checkbox" id="mm-${m.id}" ${m.included ? "checked" : ""} onchange="toggleModalMember('${m.id}',this.checked)" style="width:auto;cursor:pointer">
         <label for="mm-${m.id}" style="font-size:13px;font-weight:500;cursor:pointer;flex:1">${esc(m.name)}</label>
+        ${guestStepperHtml(m)}
         <span style="font-size:10px;color:var(--muted)">Casual</span>
       </div>`,
       )
@@ -943,7 +983,7 @@ function addInlineMember() {
   const newMember = { id: uid(), name, type: "casual" };
   members.push(newMember);
   ss("hl_members", members);
-  tempMembers.push({ ...newMember, included: true });
+  tempMembers.push({ ...newMember, included: true, guestCount: 0 });
   inp.value = "";
   // Casual: NOT auto-added to cost lines (must be ticked manually)
   renderModalMembers();
@@ -992,6 +1032,7 @@ function saveSession() {
           id: m.id,
           name: m.name,
           paid: existing ? existing.paid : false,
+          guestCount: m.guestCount || 0,
         };
       });
       sessions[idx] = {
@@ -1017,6 +1058,7 @@ function saveSession() {
         id: m.id,
         name: m.name,
         paid: false,
+        guestCount: m.guestCount || 0,
       })),
       ...(tempSessionPollLink ? { pollId: tempSessionPollLink } : {}),
     };
@@ -1229,7 +1271,7 @@ function renderDetailVoteTab(s, sid) {
       const amt = calcMemberAmount(s, m.id);
       html += `<div class="player-item" style="margin-bottom:6px">
         <div class="avatar">${initials(m.name)}</div>
-        <div style="flex:1"><div class="pi-name">${esc(m.name)}</div><div class="pi-detail">Owes ${fmt(amt)}</div></div>
+        <div style="flex:1"><div class="pi-name">${esc(m.name)}${guestSuffix(m)}</div><div class="pi-detail">Owes ${fmt(amt)}</div></div>
         <div class="pi-actions">
           <button class="btn-pay-toggle" onclick="togglePaid('${sid}','${m.id}')">✓ Paid</button>
         </div>
@@ -1242,7 +1284,7 @@ function renderDetailVoteTab(s, sid) {
       const amt = calcMemberAmount(s, m.id);
       html += `<div class="player-item paid-item" style="margin-bottom:6px">
         <div class="avatar av-paid">${initials(m.name)}</div>
-        <div style="flex:1"><div class="pi-name">${esc(m.name)}</div><div class="pi-detail paid-detail">Paid ${fmt(amt)}</div></div>
+        <div style="flex:1"><div class="pi-name">${esc(m.name)}${guestSuffix(m)}</div><div class="pi-detail paid-detail">Paid ${fmt(amt)}</div></div>
         <div class="pi-actions">
           <span class="badge-paid-sm">Paid</span>
           <button class="btn-undo-pay" onclick="togglePaid('${sid}','${m.id}')">Undo</button>
@@ -1252,6 +1294,14 @@ function renderDetailVoteTab(s, sid) {
   }
 
   return html;
+}
+
+// Small "+N" label shown right next to a member's name wherever a guest they
+// brought is folded into their own cost share instead of a separate member.
+function guestSuffix(m) {
+  const n = m && m.guestCount ? m.guestCount : 0;
+  if (!n) return "";
+  return ` <span class="badge-pill badge-blue" style="font-size:9px;margin-left:4px;vertical-align:middle">+${n}</span>`;
 }
 
 function openDetail(sid) {
@@ -2661,24 +2711,28 @@ function createSessionFromPoll(pid) {
     }
     votedIds.add(m.id);
   });
-  // Members who selected a "+N" option are bringing N extra guests — add one
-  // casual member per guest (named after the voter) so the cost split accounts for them.
+  // Members who selected a "+N" option are bringing N extra guests. Instead of
+  // creating a separate "Name +N" member, fold N into the voter's OWN member
+  // as guestCount — they stay a single avatar in the session, shown with a
+  // "+N" badge, and their cost share is weighted up accordingly (see
+  // calcMemberAmount / memberWeight) rather than splitting into extra people.
   const pOptions = pollOptions(p);
   const allVotes = p.votes ? Object.values(p.votes) : [];
+  const guestCounts = {}; // memberId -> total extra guests for this session
   allVotes.forEach((v) => {
+    let extra = 0;
     voteChoices(v).forEach((cid) => {
       const opt = pOptions.find((o) => o.id === cid);
-      const n = opt ? extraGuestCount(opt.label) : 0;
-      for (let i = 1; i <= n; i++) {
-        const guestName = `${v.name.trim()} +${i}`;
-        let gm = members.find((mm) => nameKey(mm.name) === nameKey(guestName));
-        if (!gm) {
-          gm = { id: uid(), name: guestName, type: "casual" };
-          members.push(gm);
-        }
-        votedIds.add(gm.id);
-      }
+      extra += opt ? extraGuestCount(opt.label) : 0;
     });
+    if (extra <= 0) return;
+    let m = members.find((mm) => nameKey(mm.name) === nameKey(v.name));
+    if (!m) {
+      m = { id: uid(), name: v.name.trim(), type: "casual" };
+      members.push(m);
+    }
+    votedIds.add(m.id); // include them even if they didn't vote "Join" themselves
+    guestCounts[m.id] = (guestCounts[m.id] || 0) + extra;
   });
   ss("hl_members", members);
   editingSessionId = null;
@@ -2693,6 +2747,7 @@ function createSessionFromPoll(pid) {
   tempMembers = members.map((m) => ({
     ...m,
     included: votedIds.has(m.id),
+    guestCount: guestCounts[m.id] || 0,
   }));
   tempCosts = COST_PRESETS.map((pr) => ({
     id: uid(),
