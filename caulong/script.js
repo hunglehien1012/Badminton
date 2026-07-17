@@ -2224,8 +2224,8 @@ let pollsCache = {},
 // per-poll from the "Create/Edit Vote" card; members can also add options
 // from the public vote page itself (but can't edit or delete any option).
 const DEFAULT_POLL_OPTIONS = [
-  { id: "in", label: "Join" },
-  { id: "out", label: "Can't make it" },
+  { id: "in", label: "Go" },
+  { id: "out", label: "Bận" },
 ];
 // Color palette cycled by option position, used for chips/avatars/rows.
 const OPTION_PALETTE = [
