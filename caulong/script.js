@@ -1144,6 +1144,20 @@ function weekdayName(dayIndex) {
   return (voterLang === "vi" ? VN_WEEKDAYS_FULL : EN_WEEKDAYS_FULL)[dayIndex];
 }
 const VOTER_STRINGS = {
+  voteCreatedTitle: { en: "Vote created 🎉", vi: "Đã tạo vote 🎉" },
+  voteCreatedDesc: {
+    en: "Go to Manage vote to add costs. You can also open Manage vote later from My hosted votes.",
+    vi: "Vào phần manage vote để thêm chi phí. Bạn cũng có thể vào phần My hosted vote để xem manage vote.",
+  },
+  votingLinkLabel: { en: "🔗 Voting link", vi: "🔗 Link vote" },
+  manageLinkLabel: { en: "🔑 Manage link", vi: "🔑 Link quản lý" },
+  copyBtn: { en: "Copy", vi: "Sao chép" },
+  copied: { en: "Copied", vi: "Đã sao chép" },
+  manageLinkCopied: {
+    en: "Manage link copied",
+    vi: "Đã sao chép link quản lý",
+  },
+  viewVotePage: { en: "View vote page", vi: "Xem trang vote" },
   tabInfo: { en: "Details", vi: "Chi tiết" },
   tabVote: { en: "Vote", vi: "Vote" },
   tabParticipants: { en: "Participants", vi: "Người tham gia" },
@@ -2554,11 +2568,7 @@ function manageLink(pid) {
 function copyManageLink(pid, silent) {
   const url = manageLink(pid);
   const done = () =>
-    showToast(
-      silent
-        ? "Manage link copied — save it somewhere safe!"
-        : "Copied",
-    );
+    showToast(silent ? t("manageLinkCopied") : t("copied"));
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
       .writeText(url)
@@ -3096,12 +3106,12 @@ function renderHostCreateModalForm() {
     <div class="hm-form">
     <div style="margin-bottom:14px">
       <label class="field-label">Vote title</label>
-      <input type="text" id="hc-title" placeholder="E.g.: Weekend badminton, Dinner plan… (max 60 characters)" maxlength="60">
+      <input type="text" id="hc-title" maxlength="60">
     </div>
     <div style="display:flex;gap:12px;margin-bottom:14px">
       <div style="flex:1">
         <label class="field-label">Your name</label>
-        <input type="text" id="hc-name" placeholder="Who's hosting" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}">
+        <input type="text" id="hc-name" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}">
       </div>
       <div style="flex:1">
         <label class="field-label">Date</label>
@@ -3110,7 +3120,6 @@ function renderHostCreateModalForm() {
     </div>
     <div>
       <label class="field-label">Vote options</label>
-      <div style="font-size:11px;color:var(--hint);margin-bottom:6px">Tap an option to select your own answer now — no need to vote again after creating.</div>
       <div id="hc-vp-options"></div>
     </div>
     </div>
@@ -3200,31 +3209,28 @@ async function submitHostCreatePollModal() {
     });
 }
 function renderHostCreateModalSuccess(pid) {
-  document.getElementById("hc-modal-title").textContent = "Vote created 🎉";
-  // The copy-link icon requested "up in the corner" — sits in the modal
-  // header next to the × close button, copies the main voting link.
-  document.getElementById("hc-modal-copy-icon").innerHTML =
-    `<button class="btn-icon" onclick="copyPollLink('${pid}')" title="Copy voting link" style="font-size:15px">📋</button>`;
+  document.getElementById("hc-modal-title").textContent = t("voteCreatedTitle");
+  document.getElementById("hc-modal-copy-icon").innerHTML = "";
   const body = document.getElementById("hc-modal-body");
   body.innerHTML = `
-    <div style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:16px">Share the first link so people can vote. Save the second one for yourself — it's the only way to edit, close, or delete this vote later.</div>
+    <div style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:16px">${t("voteCreatedDesc")}</div>
     <div style="margin-bottom:14px">
-      <label class="field-label">🔗 Voting link (share this)</label>
+      <label class="field-label">${t("votingLinkLabel")}</label>
       <div style="display:flex;gap:6px">
         <input type="text" readonly value="${esc(pollLink(pid))}" style="flex:1;font-size:12px" onclick="this.select()">
-        <button class="btn btn-ghost btn-sm" onclick="copyPollLink('${pid}')">Copy</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyPollLink('${pid}')">${t("copyBtn")}</button>
       </div>
     </div>
     <div>
-      <label class="field-label">🔑 Manage link (keep this private!)</label>
+      <label class="field-label">${t("manageLinkLabel")}</label>
       <div style="display:flex;gap:6px">
         <input type="text" readonly value="${esc(manageLink(pid))}" style="flex:1;font-size:12px" onclick="this.select()">
-        <button class="btn btn-ghost btn-sm" onclick="copyManageLink('${pid}',true)">Copy</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyManageLink('${pid}',true)">${t("copyBtn")}</button>
       </div>
     </div>
   `;
   document.getElementById("hc-modal-footer").innerHTML =
-    `<button class="btn btn-primary" onclick="closeModal('modal-host-create');location.href='?poll=${pid}'">View vote page</button>`;
+    `<button class="btn btn-primary" onclick="closeModal('modal-host-create');location.href='?poll=${pid}'">${t("viewVotePage")}</button>`;
 }
 async function initHostManageView(pid) {
   hcSetView("Manage your vote");
@@ -3343,7 +3349,15 @@ function updateHostSaveButtonState() {
 function renderHostManageForm(pid, p) {
   const body = document.getElementById("host-body");
   tempHostCosts =
-    p.costs && p.costs.length > 0 ? p.costs.map((c) => ({ ...c })) : [];
+    p.costs && p.costs.length > 0
+      ? p.costs.map((c) => ({ ...c }))
+      : COST_PRESETS.map((pr) => ({
+          id: uid(),
+          name: pr.name,
+          emoji: pr.emoji,
+          amount: 0,
+          qty: "",
+        }));
   tempNoShows = { ...(p.noShows || {}) };
   tempCostBasisOptionId = p.costBasisOptionId || null;
   const attendanceOptions = computeOptionAttendance(p).filter(
