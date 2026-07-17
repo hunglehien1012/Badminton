@@ -142,6 +142,46 @@ function nameKey(s) {
       .replace(/^_+|_+$/g, "") || "x"
   );
 }
+
+// ─── AVATAR MẶC ĐỊNH THEO TÊN ────────────────────────────────────────
+// Thêm cặp "Tên": "link ảnh" vào bảng dưới. Khi ai đó vote/nhập đúng tên
+// (KHÔNG phân biệt hoa–thường & dấu, vd "Dương" = "duong" = "DƯƠNG") mà
+// chưa tự đặt ảnh riêng, ảnh này sẽ tự hiển thị ở mọi nơi (Vote tab,
+// no-show, người tổ chức…). Dán link ảnh thật của bạn vào để thay thế.
+const NAME_AVATARS = {
+  Dương: "avatars/Duong.jpg",
+  Trung: "avatars/Trung.jpg",
+  Hùng: "avatars/avat.jpeg",
+  Hào: "avatars/Hao.jpg",
+  Trí: "avatars/Tri.jpg",
+  Mai: "avatars/Mai.jpg",
+  Thạnh: "avatars/Thanh.jpg",
+  "Tú Anh": "avatars/Tuanh.jpg",
+  // "Huy": "avatars/huy.jpg",
+};
+// Chuẩn hoá mỗi tên đã map thành các "từ" (token) để so khớp theo từ.
+const _NAME_AVATAR_ENTRIES = Object.entries(NAME_AVATARS).map(([k, v]) => {
+  const key = nameKey(k);
+  return { key, tokens: key.split("_").filter(Boolean), url: v };
+});
+function defaultAvatarFor(name) {
+  if (!name) return null;
+  const key = nameKey(name);
+  // 1) Khớp chính xác cả tên → ưu tiên nhất.
+  const exact = _NAME_AVATAR_ENTRIES.find((e) => e.key === key);
+  if (exact) return exact.url;
+  // 2) Nếu không, khớp khi tên đã map xuất hiện dưới dạng TỪ trong tên nhập —
+  //    vd "Dương" cũng khớp "Q. Dương" hay "Dương Anh". Nếu nhiều tên map cùng
+  //    khớp, chọn tên map có nhiều từ nhất (cụ thể nhất).
+  const nameTokens = new Set(key.split("_").filter(Boolean));
+  let best = null;
+  for (const e of _NAME_AVATAR_ENTRIES) {
+    if (e.tokens.length && e.tokens.every((tk) => nameTokens.has(tk))) {
+      if (!best || e.tokens.length > best.tokens.length) best = e;
+    }
+  }
+  return best ? best.url : null;
+}
 // Danh sách tên/chuỗi bị chặn khi vote — chuẩn hóa (bỏ dấu, chữ thường, bỏ
 // khoảng trắng) trước khi so khớp, để bắt được cả biến thể cách chữ ra
 // ("n u r u") lẫn có dấu ("Nauy"). Bất kỳ tên nào chứa số 7 (ở bất kỳ vị trí
@@ -2545,11 +2585,7 @@ function pollLink(pid) {
 function copyPollLink(pid, silent) {
   const url = pollLink(pid);
   const done = () =>
-    showToast(
-      silent
-        ? "Vote link copied — share it with the group"
-        : "Copied",
-    );
+    showToast(silent ? "Vote link copied — share it with the group" : "Copied");
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
       .writeText(url)
@@ -2567,8 +2603,7 @@ function manageLink(pid) {
 }
 function copyManageLink(pid, silent) {
   const url = manageLink(pid);
-  const done = () =>
-    showToast(silent ? t("manageLinkCopied") : t("copied"));
+  const done = () => showToast(silent ? t("manageLinkCopied") : t("copied"));
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
       .writeText(url)
@@ -2636,7 +2671,10 @@ function mergedPollVotes(p) {
       avatar: earlier.avatar || later.avatar,
     });
   });
-  return Array.from(byName.values());
+  return Array.from(byName.values()).map((v) => ({
+    ...v,
+    avatar: v.avatar || defaultAvatarFor(v.name),
+  }));
 }
 // Returns votes grouped by each option defined on the poll (or the defaults for old polls)
 function pollVotesByOption(p) {
@@ -2948,7 +2986,7 @@ let voterPid = null,
 
 async function initVoterView(pid) {
   voterPid = pid;
-  vvActiveTab = "info";
+  vvActiveTab = "details";
   document.body.classList.add("voter-mode");
   const body = document.getElementById("vv-body");
   if (!fbReady()) {
@@ -3197,7 +3235,9 @@ async function submitHostCreatePollModal() {
             nameKey: nameKey(name),
             avatar: ls("hl_voter_avatar") || null,
           })
-          .catch((err) => console.error("Couldn't save creator's own vote", err));
+          .catch((err) =>
+            console.error("Couldn't save creator's own vote", err),
+          );
       }
       renderHostCreateModalSuccess(ref.key);
     })
@@ -3579,13 +3619,11 @@ function refreshNoShowChips(pid) {
     }),
   );
   const checkedKeys = [];
-  document
-    .querySelectorAll("#hm-noshow-list .ns-row")
-    .forEach((row) => {
-      const cb = row.querySelector('input[type="checkbox"]');
-      if (cb && cb.checked && row.dataset.namekey)
-        checkedKeys.push(row.dataset.namekey);
-    });
+  document.querySelectorAll("#hm-noshow-list .ns-row").forEach((row) => {
+    const cb = row.querySelector('input[type="checkbox"]');
+    if (cb && cb.checked && row.dataset.namekey)
+      checkedKeys.push(row.dataset.namekey);
+  });
   const chipsHtml = checkedKeys
     .map((k) => byKey.get(k))
     .filter(Boolean)
@@ -3603,7 +3641,7 @@ function refreshNoShowChips(pid) {
 function clearAllNoShow(pid) {
   tempNoShows = {};
   document
-    .querySelectorAll("#hm-noshow-list .ns-row input[type=\"checkbox\"]")
+    .querySelectorAll('#hm-noshow-list .ns-row input[type="checkbox"]')
     .forEach((cb) => {
       cb.checked = false;
     });
@@ -3731,7 +3769,8 @@ function renderHostCostLines() {
   }
   wrap.innerHTML = tempHostCosts
     .map((c) => {
-      const shortVal = c.amount > 0 ? Math.round(c.amount).toLocaleString("en-US") : "";
+      const shortVal =
+        c.amount > 0 ? Math.round(c.amount).toLocaleString("en-US") : "";
       const isCourt = isCourtFeeCost(c.name);
       return `<div class="cost-line" data-cid="${c.id}">
       <input class="cost-name-inp" type="text" placeholder="Cost name…" value="${esc(c.name)}"
@@ -3983,7 +4022,7 @@ function migrateLegacyVote(pid, p) {
 
 // No ?poll= param → automatically find the latest open vote
 async function initVoterLatest() {
-  vvActiveTab = "info";
+  vvActiveTab = "details";
   document.body.classList.add("voter-mode");
   const body = document.getElementById("vv-body");
   if (!fbReady()) {
@@ -4308,7 +4347,7 @@ function fbOptRow(group, myChoices, open) {
     ${expanded && votes.length ? `<div class="fb-opt-names">${votes.map((v) => `<span class="vote-chip" style="background:${avatarToneFor(v).bg};border-color:${avatarToneFor(v).border};color:${avatarToneFor(v).text}">${chipAvatarImg(v)}${esc(v.name)}</span>`).join("")}</div>` : ""}`;
 }
 
-let vvActiveTab = "info"; // 'info' | 'details' (=Vote) | 'participants' | 'payment'
+let vvActiveTab = "details"; // 'info' | 'details' (=Vote) | 'participants' | 'payment'
 function switchVvTab(tab) {
   vvActiveTab = tab;
   renderVoterView();
@@ -4360,7 +4399,10 @@ function renderPollInfoTab(p) {
       .filter((m) => !m.noShow)
       .map((m) => m.amount);
     let perPersonAmt;
-    if (nonNoShowAmounts.length < (sc.members || []).length && nonNoShowAmounts.length > 0) {
+    if (
+      nonNoShowAmounts.length < (sc.members || []).length &&
+      nonNoShowAmounts.length > 0
+    ) {
       perPersonAmt = Math.min(...nonNoShowAmounts);
     } else {
       const memberCount =
@@ -4519,10 +4561,11 @@ function renderParticipantsTab(p, groups) {
   // Organizer is optional per-vote; falls back to Brian (the app's admin,
   // see the "Brian" login link on the voter page) when left blank.
   const organizerName = (p && p.organizer && p.organizer.trim()) || "Brian";
+  const organizerAvatar = defaultAvatarFor(organizerName);
   const organizerRow = `
     <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${t("organizer")}</div>
     <div class="player-item" style="margin-bottom:18px">
-      <div class="avatar">${initials(organizerName)}</div>
+      <div class="avatar" style="${organizerAvatar ? "overflow:hidden" : ""}">${organizerAvatar ? `<img src="${esc(organizerAvatar)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : initials(organizerName)}</div>
       <div style="flex:1">
         <div class="pi-name">${esc(organizerName)}</div>
       </div>
@@ -4856,7 +4899,8 @@ function computeSelfServeCost(poll) {
     let amount = 0;
     costs.forEach((c) => {
       if (isCourtFeeCost(c.name)) {
-        amount += totalWeight > 0 ? ((c.amount || 0) * a.weight) / totalWeight : 0;
+        amount +=
+          totalWeight > 0 ? ((c.amount || 0) * a.weight) / totalWeight : 0;
       } else {
         const w = otherWeight(a);
         if (w > 0 && otherTotalWeight > 0) {
@@ -4967,7 +5011,15 @@ function renderPaymentTab(p) {
         <div style="font-size:16px;font-weight:600;color:var(--green)">${fmt(sc.collected)}</div>
       </div>
     </div>
-    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px;display:flex;align-items:center;gap:6px">${t("costs")} <span style="font-size:15px;font-weight:700;color:var(--text)">${sc.splitCount != null ? sc.splitCount : (sc.members || []).length}</span>${(() => { const ns = (sc.members || []).reduce((s, m) => s + (m.noShowCount || (m.noShow ? 1 : 0)), 0); return ns > 0 ? ` <span style="font-size:11px;font-weight:400;color:var(--hint);text-transform:none;letter-spacing:0">(${ns} no-show)</span>` : ""; })()}</div>
+    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px;display:flex;align-items:center;gap:6px">${t("costs")} <span style="font-size:15px;font-weight:700;color:var(--text)">${sc.splitCount != null ? sc.splitCount : (sc.members || []).length}</span>${(() => {
+      const ns = (sc.members || []).reduce(
+        (s, m) => s + (m.noShowCount || (m.noShow ? 1 : 0)),
+        0,
+      );
+      return ns > 0
+        ? ` <span style="font-size:11px;font-weight:400;color:var(--hint);text-transform:none;letter-spacing:0">(${ns} no-show)</span>`
+        : "";
+    })()}</div>
     ${costLines || `<div style="font-size:12px;color:var(--hint)">${t("noCosts")}</div>`}
     <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">${t("members")}</div>
     ${memberLines || `<div style="font-size:12px;color:var(--hint)">${t("noMembers")}</div>`}
@@ -5033,7 +5085,10 @@ function renderVoterSelectModal() {
   const nameVal = lockedName ? lockedName : curInput ? curInput.value : "";
   const myVoteEntry = getMyVoteEntry();
   const myAvatar =
-    (myVoteEntry && myVoteEntry.avatar) || ls("hl_voter_avatar") || null;
+    (myVoteEntry && myVoteEntry.avatar) ||
+    ls("hl_voter_avatar") ||
+    defaultAvatarFor(nameVal) ||
+    null;
   ensurePendingChoices(voterPid, voteChoices(myVoteEntry));
   const myChoices = Array.from(vvPendingChoices);
   const groups = pollVotesByOption(p);
@@ -5055,7 +5110,14 @@ function renderVoterSelectModal() {
       </div>`
     : `<div class="vv-name-box">
         <label class="field-label">Your name <span style="color:var(--coral-m)">*</span></label>
-        <input type="text" id="vv-name" placeholder="Enter your full name…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div onclick="pickVoterAvatar()" style="position:relative;cursor:pointer;flex-shrink:0" title="Add/change your photo (optional)">
+            ${avatarPreview}
+            <span style="position:absolute;bottom:-2px;right:-2px;background:var(--surface);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1">📷</span>
+          </div>
+          <input type="text" id="vv-name" placeholder="Enter your full name…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()" style="flex:1">
+        </div>
+        ${myAvatar ? `<div style="text-align:right;margin-top:4px"><span onclick="removeVoterAvatar()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">Remove photo</span></div>` : ""}
       </div>`;
   const addOptionBox = open
     ? vvShowAddOptionInput
