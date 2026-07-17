@@ -36,6 +36,11 @@ const IS_LOCAL_ENV =
   location.hostname === "127.0.0.1" ||
   location.protocol === "file:";
 const POLLS_ROOT = IS_LOCAL_ENV ? "test_polls" : "polls";
+// Public, read-by-everyone mirror of the admin's local Fixed/Casual member
+// list. Needed so a voter opening the vote link on their OWN device/phone
+// (which has none of the admin's localStorage data) can still validate their
+// typed name against the real member list — see saveMembers()/initMembersSync().
+const MEMBERS_ROOT = IS_LOCAL_ENV ? "test_members" : "members";
 // 👉 Mã quản trị: mật khẩu của tài khoản admin bạn tạo trong Firebase Console
 // (Authentication → Users → Add user). Email cố định bên dưới, mật khẩu chính
 // là "mã quản trị" mà bạn sẽ gõ khi bấm nút Admin. Đổi cả hai theo ý bạn,
@@ -245,6 +250,10 @@ function effectiveDevId(pid) {
 
 // ─── STATE ────────────────────────────────────────────────────────
 let members = ls("hl_members") || []; // [{id,name}]
+// Public mirror of `members`, kept in sync from Firebase (MEMBERS_ROOT) so
+// voters on other devices can validate/pick a name from it. See saveMembers()
+// (admin → Firebase) and initMembersSync() (Firebase → this device).
+let publicMembers = [];
 let sessions = ls("hl_sessions") || []; // [{id,date,note,address,costs:[{id,name,emoji,amount,memberIds[]}],members:[{id,name,paid,guestCount}]}]
 // guestCount: number of extra people this member is bringing/paying for,
 // folded into their own row instead of being split into separate members
@@ -335,13 +344,84 @@ function switchTab(t) {
 }
 
 // ─── MEMBERS TAB ──────────────────────────────────────────────────
+// Persists the local member list AND mirrors it to Firebase (best-effort —
+// silently no-ops if Firebase isn't configured/reachable) so that voters on
+// other devices can read the real Fixed/Casual roster to validate names
+// against (see resolveNameForAction / MEMBERS_ROOT). Any failure (e.g.
+// Firebase Rules rejecting the write) is now logged loudly instead of
+// swallowed — a silent .catch(()=>{}) here was hiding exactly this kind of
+// problem before.
+async function saveMembers() {
+  ss("hl_members", members);
+  if (!fbReady()) return;
+  await ensureFirebaseAuth(); // don't race the write against anonymous sign-in still in flight
+  const obj = {};
+  members.forEach((m) => (obj[m.id] = m));
+  try {
+    await fdb.ref(MEMBERS_ROOT).set(obj);
+    console.log("[name-picker] saveMembers(): pushed", members.length, "member(s) to", MEMBERS_ROOT);
+  } catch (err) {
+    console.error("[name-picker] saveMembers(): FAILED to write to", MEMBERS_ROOT, "—", err);
+    showToast("Couldn't sync members to Firebase — check Firebase Rules (see console)");
+  }
+}
+let _membersSyncStarted = false;
+let _adminInitialSyncDone = false; // ensures the admin-device auto-push (see initMembersSync) only runs once per page load
+// Keeps `publicMembers` (read by any device, incl. voters with no local
+// admin data) live-synced from Firebase, and folds in any member a voter
+// requested-to-add from a DIFFERENT device (pending admin approval) into
+// this device's local `members` list too, so the admin sees it in the
+// Members tab without needing to refresh.
+async function initMembersSync() {
+  if (_membersSyncStarted || !fbReady()) return;
+  _membersSyncStarted = true;
+  await ensureFirebaseAuth(); // make sure "auth != null" is already true before we ever touch MEMBERS_ROOT
+  fdb.ref(MEMBERS_ROOT).on(
+    "value",
+    (snap) => {
+      const val = snap.val() || {};
+      publicMembers = Object.values(val);
+      console.log("[name-picker] initMembersSync(): loaded", publicMembers.length, "member(s) from", MEMBERS_ROOT);
+      let changed = false;
+      publicMembers.forEach((rm) => {
+        if (!members.find((m) => m.id === rm.id)) {
+          members.push(rm);
+          changed = true;
+        }
+      });
+      if (changed) {
+        ss("hl_members", members); // local only — don't re-push, avoids a sync loop
+        const tab = document.getElementById("tab-members");
+        if (tab && tab.classList.contains("active")) renderMembers();
+      }
+      // One-time-per-load safety net: if this is the ADMIN's device and its
+      // local list has members that never made it to Firebase (e.g. they were
+      // added before this sync feature existed), push the full merged list up
+      // now so voters on other devices can actually see them. Deliberately
+      // gated to admin only — a random voter's mostly-empty local `members`
+      // array must never overwrite the real list.
+      if (ls("hl_admin") && !_adminInitialSyncDone) {
+        _adminInitialSyncDone = true;
+        saveMembers();
+      }
+      const picker = document.getElementById("modal-name-picker");
+      if (picker && picker.classList.contains("open")) {
+        const q = document.getElementById("np-search");
+        renderNamePickerList(q ? q.value : "");
+      }
+    },
+    (err) => {
+      console.error("[name-picker] initMembersSync(): FAILED to read", MEMBERS_ROOT, "—", err);
+    },
+  );
+}
 function addMember() {
   const inp = document.getElementById("new-member-name");
   const type = document.getElementById("new-member-type").value;
   const name = inp.value.trim();
   if (!name) return;
   members.push({ id: uid(), name, type: type || "fixed" });
-  ss("hl_members", members);
+  saveMembers();
   inp.value = "";
   inp.focus();
   renderMembers();
@@ -356,7 +436,7 @@ function toggleMemberType(id) {
   if (!m) return;
   const isFixed = m.type !== "casual"; // undefined hoặc 'fixed' đều là cố định
   m.type = isFixed ? "casual" : "fixed";
-  ss("hl_members", members);
+  saveMembers();
   renderMembers();
   showToast(m.name + " → " + (m.type === "fixed" ? "Fixed" : "Casual"));
 }
@@ -371,23 +451,28 @@ async function deleteMember(id) {
   )
     return;
   members = members.filter((m) => m.id !== id);
-  ss("hl_members", members);
+  saveMembers();
   renderMembers();
   showToast("Deleted");
 }
 
 function renderMembers() {
   const wrap = document.getElementById("member-list-wrap");
+  const pending = members.filter((m) => m.pending);
   if (members.length === 0) {
     wrap.innerHTML =
       '<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-text">No members yet.</div></div>';
     return;
   }
   const fixed = members.filter(
-    (m) => m.type === "fixed" || m.type === undefined,
+    (m) => !m.pending && (m.type === "fixed" || m.type === undefined),
   );
-  const casual = members.filter((m) => m.type === "casual");
+  const casual = members.filter((m) => !m.pending && m.type === "casual");
   let html = "";
+  if (pending.length > 0) {
+    html += `<div class="sec-label" style="margin-bottom:8px">⏳ Pending approval <span class="count-bubble">${pending.length}</span></div>`;
+    html += pending.map((m) => pendingMemberRow(m)).join("");
+  }
   if (fixed.length > 0) {
     html += `<div class="sec-label" style="margin-bottom:8px">⭐ Fixed <span class="count-bubble">${fixed.length}</span></div>`;
     html += fixed.map((m) => memberRow(m)).join("");
@@ -414,6 +499,42 @@ function memberRow(m) {
     <button class="btn btn-ghost btn-xs" onclick="toggleMemberType('${m.id}')" title="Change type" style="margin-right:4px">Change</button>
     <button class="btn-icon" onclick="deleteMember('${m.id}')" title="Delete">×</button>
   </div>`;
+}
+
+function pendingMemberRow(m) {
+  return `<div class="pending-row">
+    <div class="avatar" style="background:var(--amber-l);color:var(--amber)">${initials(m.name)}</div>
+    <div style="flex:1">
+      <div class="pi-name">${esc(m.name)}</div>
+      <div class="pi-detail">Requested by a voter — not yet in Fixed/Casual list</div>
+    </div>
+    <button class="btn btn-green btn-xs" onclick="approveMember('${m.id}')">✓ Approve</button>
+    <button class="btn btn-danger btn-xs" onclick="rejectMember('${m.id}')">✕ Reject</button>
+  </div>`;
+}
+function approveMember(id) {
+  const m = members.find((m) => m.id === id);
+  if (!m) return;
+  delete m.pending;
+  if (!m.type) m.type = "casual";
+  saveMembers();
+  renderMembers();
+  showToast(`Approved "${m.name}" as ${m.type === "fixed" ? "Fixed" : "Casual"} member`);
+}
+async function rejectMember(id) {
+  const m = members.find((m) => m.id === id);
+  if (!m) return;
+  if (
+    !(await showConfirm({
+      title: "Reject request",
+      message: `Reject "${m.name}"'s request to be added as a member? They'll need to pick an existing name (or request again) to vote.`,
+    }))
+  )
+    return;
+  members = members.filter((mm) => mm.id !== id);
+  saveMembers();
+  renderMembers();
+  showToast("Rejected");
 }
 
 function memberDebt(mid) {
@@ -1055,7 +1176,7 @@ function addInlineMember() {
   // Inline-added members are casual by default
   const newMember = { id: uid(), name, type: "casual" };
   members.push(newMember);
-  ss("hl_members", members);
+  saveMembers();
   tempMembers.push({ ...newMember, included: true, guestCount: 0 });
   inp.value = "";
   // Casual: NOT auto-added to cost lines (must be ticked manually)
@@ -1791,10 +1912,17 @@ function downloadFile(content, filename) {
 
 // ─── MODAL HELPERS ────────────────────────────────────────────────
 function openModal(id) {
-  document.getElementById(id).classList.add("open");
+  const el = document.getElementById(id);
+  if (!el) {
+    console.error(`openModal: no element with id "${id}"`);
+    return;
+  }
+  el.classList.add("open");
 }
 function closeModal(id) {
-  document.getElementById(id).classList.remove("open");
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove("open");
 }
 // Close on backdrop click
 document.querySelectorAll(".modal-backdrop").forEach((b) => {
@@ -1963,7 +2091,7 @@ function restoreData(input) {
         return;
       members = data.members;
       sessions = data.sessions;
-      ss("hl_members", members);
+      saveMembers();
       ss("hl_sessions", sessions);
       renderSessions();
       showToast(
@@ -2949,7 +3077,7 @@ function createSessionFromPoll(pid) {
     votedIds.add(m.id); // include them even if they didn't vote "Join" themselves
     guestCounts[m.id] = (guestCounts[m.id] || 0) + extra;
   });
-  ss("hl_members", members);
+  saveMembers();
   editingSessionId = null;
   tempSessionPollLink = pid;
   document.getElementById("modal-session-title").textContent =
@@ -5054,6 +5182,276 @@ function fbOptSummaryRow(group, totalMembers) {
 // Voting now happens here instead of directly on the summary page: tap
 // "Change vote" to open this, pick options (checkmarks toggle a LOCAL
 // pending selection only), then tap Submit to actually save it.
+// ─── RESTRICTED VOTER NAME (must match a Fixed/Casual member) ──────
+// Guarantees at least one real fetch of the public member list has
+// completed before we ever decide a typed name "doesn't match" — otherwise
+// a slow connection could wrongly bounce a legit member into the
+// request-to-add flow just because the realtime listener hadn't caught up yet.
+let _membersLoadPromise = null;
+function ensureMembersLoaded() {
+  if (_membersLoadPromise) return _membersLoadPromise;
+  _membersLoadPromise = new Promise((resolve) => {
+    if (!fbReady()) {
+      console.warn(
+        "[name-picker] Firebase not configured/reachable — proceeding with an empty member list.",
+      );
+      return resolve();
+    }
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+    // Safety net: Firebase rules not yet updated for MEMBERS_ROOT (or a slow
+    // connection) must NOT hang the whole name flow forever — give up after
+    // 5s and just proceed with whatever's in publicMembers so far.
+    const timeout = setTimeout(() => {
+      console.warn(
+        "[name-picker] Timed out loading " +
+          MEMBERS_ROOT +
+          " from Firebase after 5s — check that your Firebase Realtime Database rules allow read access to this path.",
+      );
+      finish();
+    }, 5000);
+    fdb
+      .ref(MEMBERS_ROOT)
+      .once("value")
+      .then((snap) => {
+        clearTimeout(timeout);
+        if (publicMembers.length === 0) {
+          const val = snap.val() || {};
+          publicMembers = Object.values(val);
+        }
+        finish();
+      })
+      .catch((err) => {
+        clearTimeout(timeout);
+        console.error(
+          "[name-picker] Error reading " + MEMBERS_ROOT + " from Firebase:",
+          err,
+        );
+        finish();
+      });
+  });
+  return _membersLoadPromise;
+}
+// Looks up a typed name against the public (Firebase-synced) member list,
+// accent/case-insensitive via the existing nameKey() helper.
+function findMemberByTypedName(name) {
+  const key = nameKey(name);
+  return publicMembers.find((m) => !m.pending && nameKey(m.name) === key) || null;
+}
+let namePickerCallback = null; // called with (pickedName|null) when the picker resolves
+// Resolves the name to use for a voting action (toggleVote/confirmVote/
+// addVoterOption): returns the already-locked name if there is one, else
+// validates whatever is typed in #vv-name against the member list. An exact
+// (accent/case-insensitive) match resolves immediately; anything else opens
+// the single-select picker modal instead of accepting the free-typed name.
+// Resolves to `null` if the user cancels/hasn't typed anything valid yet.
+async function resolveNameForAction() {
+  console.log("[name-picker] resolveNameForAction() called");
+  try {
+    const lockedName = (ls("hl_voter_locked_name") || "").trim();
+    if (lockedName) {
+      console.log("[name-picker] already locked as:", lockedName);
+      return lockedName;
+    }
+    const inp = document.getElementById("vv-name");
+    const typed = inp ? inp.value.trim() : "";
+    console.log("[name-picker] typed name:", JSON.stringify(typed));
+    if (!typed) {
+      showToast("Please enter your name before voting");
+      if (inp) inp.focus();
+      return null;
+    }
+    if (isNameBlocked(typed)) {
+      console.log("[name-picker] blocked by isNameBlocked()");
+      showToast("Invalid name");
+      return null;
+    }
+    console.log("[name-picker] loading member list…");
+    await ensureMembersLoaded();
+    console.log("[name-picker] publicMembers:", publicMembers);
+    const match = findMemberByTypedName(typed);
+    console.log("[name-picker] match found:", match);
+    if (match) {
+      if (!(await resolveVoterIdentity(match.name))) return null;
+      ss("hl_voter_locked_name", match.name);
+      return match.name;
+    }
+    console.log("[name-picker] no match — opening picker modal");
+    return new Promise((resolve) => {
+      openNamePickerModal(typed, async (picked) => {
+        try {
+          if (!picked) {
+            resolve(null);
+            return;
+          }
+          if (!(await resolveVoterIdentity(picked))) {
+            resolve(null);
+            return;
+          }
+          ss("hl_voter_locked_name", picked);
+          resolve(picked);
+        } catch (err) {
+          console.error("[name-picker] Error resolving picked name:", err);
+          showToast("Something went wrong — please try again");
+          resolve(null);
+        }
+      });
+    });
+  } catch (err) {
+    console.error("[name-picker] resolveNameForAction failed:", err);
+    showToast("Something went wrong — please try again");
+    return null;
+  }
+}
+function openNamePickerModal(typedQuery, callback) {
+  const modalEl = document.getElementById("modal-name-picker");
+  if (!modalEl) {
+    console.error(
+      "[name-picker] #modal-name-picker not found — index.html needs to be re-uploaded alongside script.js.",
+    );
+    showToast("App files out of date — please reload / contact admin");
+    callback(null);
+    return;
+  }
+  namePickerCallback = callback;
+  const search = document.getElementById("np-search");
+  const hint = document.getElementById("np-hint");
+  if (search) search.value = typedQuery || "";
+  if (hint)
+    hint.textContent = typedQuery
+      ? `"${typedQuery}" isn't in the member list yet — search and pick your name, or request to add it.`
+      : "Search and pick your name from the member list.";
+  renderNamePickerList(typedQuery || "");
+  openModal("modal-name-picker");
+  setTimeout(() => {
+    if (search) search.focus();
+  }, 0);
+}
+function closeNamePickerModal() {
+  closeModal("modal-name-picker");
+  if (namePickerCallback) {
+    const cb = namePickerCallback;
+    namePickerCallback = null;
+    cb(null);
+  }
+}
+// The generic ".modal-backdrop" click handler (wired up at script load) only
+// removes the "open" class — it doesn't know this modal has a pending
+// Promise waiting on a name. Without this, clicking outside the modal would
+// leave resolveNameForAction() hanging forever instead of resolving to null.
+// Guarded with a null-check: if index.html hasn't been updated to include
+// the #modal-name-picker markup yet, this must NOT throw — a throw here
+// would be a top-level (not inside a function) statement and would silently
+// abort every bit of script.js below it on the page, breaking the whole app.
+(function attachNamePickerBackdropListener() {
+  const el = document.getElementById("modal-name-picker");
+  if (!el) {
+    console.error(
+      "[name-picker] #modal-name-picker not found in the page — index.html is out of date (needs to be re-uploaded alongside script.js).",
+    );
+    return;
+  }
+  el.addEventListener("click", (e) => {
+    if (e.target.id === "modal-name-picker") closeNamePickerModal();
+  });
+})();
+function npRowHtml(m) {
+  const tone = avatarToneFor(m);
+  const av = defaultAvatarFor(m.name);
+  const avatarHtml = av
+    ? `<img src="${av}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    : esc(initials(m.name));
+  return `<div class="np-row" onclick="pickName('${m.id}')">
+    <span class="np-row-avatar" style="background:${av ? "transparent" : tone.solid};overflow:hidden">${avatarHtml}</span>
+    <span class="np-row-name">${esc(m.name)}</span>
+  </div>`;
+}
+function renderNamePickerList(query) {
+  const list = document.getElementById("np-list");
+  if (!list) return;
+  const q = (query || "").trim().toLowerCase();
+  const pool = publicMembers.filter((m) => !m.pending);
+  const filtered = q
+    ? pool.filter((m) => m.name.toLowerCase().includes(q))
+    : pool;
+  const fixed = filtered.filter((m) => m.type === "fixed" || m.type === undefined);
+  const casual = filtered.filter((m) => m.type === "casual");
+  let html = "";
+  if (fixed.length) html += fixed.map(npRowHtml).join("");
+  if (casual.length) html += casual.map(npRowHtml).join("");
+  if (!filtered.length)
+    html += `<div class="ns-empty">No members found.</div>`;
+  const trimmedQuery = (query || "").trim();
+  html += `<div class="np-add-row" onclick="requestAddNewMember()">
+    <span class="np-add-circle">+</span>
+    <span class="np-add-label">${trimmedQuery ? `Can't find "${esc(trimmedQuery)}"? Request to add` : "Can't find your name? Request to add"}</span>
+  </div>`;
+  list.innerHTML = html;
+}
+function pickName(id) {
+  const m = publicMembers.find((mm) => mm.id === id) || members.find((mm) => mm.id === id);
+  if (!m) return;
+  closeModal("modal-name-picker");
+  const cb = namePickerCallback;
+  namePickerCallback = null;
+  if (cb) cb(m.name);
+}
+// A voter whose name genuinely isn't in the Fixed/Casual list yet can ask to
+// be added — this does NOT create a confirmed member immediately; it's
+// pushed to Firebase flagged `pending: true` so the admin sees it under
+// "⏳ Pending approval" in the Members tab and can approve/reject it. The
+// voter can keep voting under that name right away; nothing changes for them
+// once approved (they were already using the requested name).
+async function requestAddNewMember() {
+  const searchEl = document.getElementById("np-search");
+  const prefill = searchEl ? searchEl.value.trim() : "";
+  const typed = await showPrompt({
+    title: "Request to add your name",
+    label: prefill
+      ? `Confirm the name to request (found: "${prefill}")`
+      : "Your full name",
+    placeholder: "Enter your full name…",
+    confirmText: "Send request",
+  });
+  if (typed === null) return;
+  const trimmed = typed.trim();
+  if (!trimmed) {
+    showToast("Please enter your name");
+    return;
+  }
+  if (isNameBlocked(trimmed)) {
+    showToast("Invalid name");
+    return;
+  }
+  // If it actually matches an existing member after all, just use that
+  // instead of creating a duplicate pending request.
+  const existing = findMemberByTypedName(trimmed);
+  if (existing) {
+    closeModal("modal-name-picker");
+    const cb = namePickerCallback;
+    namePickerCallback = null;
+    if (cb) cb(existing.name);
+    return;
+  }
+  const entry = { id: uid(), name: trimmed, type: "casual", pending: true };
+  publicMembers.push(entry);
+  if (fbReady()) {
+    fdb
+      .ref(MEMBERS_ROOT + "/" + entry.id)
+      .set(entry)
+      .catch((err) => console.error(err));
+  }
+  closeModal("modal-name-picker");
+  showToast(`Sent — waiting for admin approval to add "${trimmed}"`);
+  const cb = namePickerCallback;
+  namePickerCallback = null;
+  if (cb) cb(trimmed);
+}
+
 function openVoterSelectModal() {
   if (!voterPoll) return;
   if (voterPoll.status !== "open") {
@@ -5103,8 +5501,8 @@ function renderVoterSelectModal() {
             <span style="position:absolute;bottom:-2px;right:-2px;background:var(--surface);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1">📷</span>
           </div>
           <span style="font-size:15px;font-weight:600;flex:1">${esc(lockedName)}</span>
-          <span onclick="resetVoterName()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">Not you?</span>
         </div>
+        <div style="font-size:11px;color:var(--hint);margin-top:4px">Wrong name? Ask the club admin to fix it for you.</div>
         ${myAvatar ? `<div style="text-align:right;margin-top:4px"><span onclick="removeVoterAvatar()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">Remove photo</span></div>` : ""}
       </div>`
     : `<div class="vv-name-box">
@@ -5114,7 +5512,7 @@ function renderVoterSelectModal() {
             ${avatarPreview}
             <span style="position:absolute;bottom:-2px;right:-2px;background:var(--surface);border:1px solid var(--border);border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1">📷</span>
           </div>
-          <input type="text" id="vv-name" placeholder="Enter your full name…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()" style="flex:1">
+          <input type="text" id="vv-name" placeholder="Type your name (must match a club member)…" maxlength="30" autocomplete="off" value="${esc(nameVal)}" oninput="renderVoterNameHint()" style="flex:1">
         </div>
         ${myAvatar ? `<div style="text-align:right;margin-top:4px"><span onclick="removeVoterAvatar()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">Remove photo</span></div>` : ""}
       </div>`;
@@ -5191,7 +5589,7 @@ function handleAddOptionBlur(inputEl) {
 // but can't rename or delete any option (only the admin can, from the
 // Create/Edit Vote card). Pushed as its own Firebase child so two people
 // adding an option at the same time never overwrite each other.
-function addVoterOption() {
+async function addVoterOption() {
   if (!voterPoll || voterPoll.status !== "open") {
     showToast("This vote is closed");
     return;
@@ -5207,23 +5605,11 @@ function addVoterOption() {
     showToast("That option already exists");
     return;
   }
-  // Prefer the already-locked name; if this person hasn't voted/locked a name
-  // yet this session, fall back to whatever they've typed into the "Your
-  // name" field so far, so the activity log can credit them by name instead
-  // of showing "Someone".
-  const lockedName = (ls("hl_voter_locked_name") || "").trim();
-  const nameInp = document.getElementById("vv-name");
-  const typedName = nameInp ? nameInp.value.trim() : "";
-  const voterName = lockedName || typedName;
-  if (!voterName) {
-    showToast("Please enter your name first");
-    if (nameInp) nameInp.focus();
-    return;
-  }
-  if (isNameBlocked(voterName)) {
-    showToast("Invalid name");
-    return;
-  }
+  // Resolves to the locked name if there is one, otherwise validates whatever
+  // is typed in "Your name" against the member list (opening the picker if it
+  // doesn't match) — see resolveNameForAction().
+  const voterName = await resolveNameForAction();
+  if (!voterName) return;
   const ref = fdb.ref(POLLS_ROOT + "/" + voterPid + "/options").push();
   ref
     .set({ id: ref.key, label, addedBy: voterName, at: Date.now() })
@@ -5250,58 +5636,6 @@ function renderVoterNameHint() {
   // Don't re-render everything (avoid losing focus while typing) — light update only if needed later
 }
 
-async function resetVoterName() {
-  if (
-    !(await showConfirm({
-      title: "Change vote name?",
-      tone: "info",
-      message: "This device's current vote will be updated to the new name.",
-      yesText: "Change name",
-      noText: "Cancel",
-    }))
-  )
-    return;
-  const newName = await showPrompt({
-    title: "Change vote name",
-    label: "New name",
-    placeholder: "Enter your full name…",
-    confirmText: "Save",
-  });
-  if (newName === null) return;
-  const trimmed = newName.trim();
-  if (!trimmed) {
-    showToast("Please enter your name");
-    return;
-  }
-  if (isNameBlocked(trimmed)) {
-    showToast("Invalid name");
-    return;
-  }
-  if (!(await resolveVoterIdentity(trimmed))) return;
-  try {
-    ss("hl_voter_locked_name", trimmed);
-  } catch {}
-  // Update the name directly on this device's existing vote entry (if any) —
-  // no need to reselect options or submit again, the choices stay as-is.
-  const devId = effectiveDevId(voterPid);
-  const existing = voterPoll && voterPoll.votes && voterPoll.votes[devId];
-  if (existing && voterPid && fdb) {
-    fdb
-      .ref(POLLS_ROOT + "/" + voterPid + "/votes/" + devId)
-      .update({ name: trimmed, nameKey: nameKey(trimmed) })
-      .then(() => {
-        showToast("Name updated");
-        renderVoterView();
-      })
-      .catch((err) => {
-        showToast(
-          "Error: " + (err && err.message ? err.message : "couldn't connect"),
-        );
-      });
-  } else {
-    renderVoterView();
-  }
-}
 
 // Tapping an option only changes the LOCAL pending selection — nothing is
 // written to Firebase until the member taps "Confirm selection". This avoids
@@ -5375,23 +5709,8 @@ async function toggleVote(optionId) {
     showToast("This vote is closed");
     return;
   }
-  const lockedName = (ls("hl_voter_locked_name") || "").trim();
-  let name = lockedName;
-  if (!name) {
-    const inp = document.getElementById("vv-name");
-    name = inp ? inp.value.trim() : "";
-    if (!name) {
-      showToast("Please enter your name before voting");
-      return;
-    }
-    if (isNameBlocked(name)) {
-      showToast("Invalid name");
-      return;
-    }
-    if (!(await resolveVoterIdentity(name))) return;
-    // Lock the name to this device on first tap — prevents voting on someone else's behalf
-    ss("hl_voter_locked_name", name);
-  }
+  const name = await resolveNameForAction();
+  if (!name) return;
   ensurePendingChoices(voterPid, voteChoices(getMyVoteEntry()));
   if (vvPendingChoices.has(optionId)) vvPendingChoices.delete(optionId);
   else vvPendingChoices.add(optionId);
@@ -5400,6 +5719,7 @@ async function toggleVote(optionId) {
 // Locks in the pending selection — this is the actual "vote attempt" that
 // counts toward the 4-free / growing-delay throttle.
 async function confirmVote() {
+  console.log("[name-picker] confirmVote() called, poll status:", voterPoll && voterPoll.status);
   if (!voterPoll || voterPoll.status !== "open") {
     showToast("This vote is closed");
     return;
@@ -5411,22 +5731,8 @@ async function confirmVote() {
     return;
   }
   if (!vvPendingChoices) return;
-  const lockedName = (ls("hl_voter_locked_name") || "").trim();
-  let name = lockedName;
-  if (!name) {
-    const inp = document.getElementById("vv-name");
-    name = inp ? inp.value.trim() : "";
-    if (!name) {
-      showToast("Please enter your name before voting");
-      return;
-    }
-    if (isNameBlocked(name)) {
-      showToast("Invalid name");
-      return;
-    }
-    if (!(await resolveVoterIdentity(name))) return;
-    ss("hl_voter_locked_name", name);
-  }
+  const name = await resolveNameForAction();
+  if (!name) return;
   const choices = Array.from(vvPendingChoices);
   const key = voteAttemptKey(voterPid);
   const attempt = (ls(key) || 0) + 1;
@@ -5614,6 +5920,7 @@ async function removeVoterAvatar() {
 
 // On load: auto-add all members to default cost memberIds in modal
 renderSessions();
+initMembersSync();
 
 // Nếu mở qua link vote (?poll=...) → hiển thị trang vote cho người chơi
 // Chế độ hiển thị:
