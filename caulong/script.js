@@ -149,16 +149,14 @@ function nameKey(s) {
 // chưa tự đặt ảnh riêng, ảnh này sẽ tự hiển thị ở mọi nơi (Vote tab,
 // no-show, người tổ chức…). Dán link ảnh thật của bạn vào để thay thế.
 const NAME_AVATARS = {
-  Dương: "avatars/duong.jpg",
-  Trung: "avatars/trung.jpg",
-  Hào: "avatars/Hao.jpg",
-  Trí: "avatars/Tri.jpg",
+  "Dương": "avatars/duong.jpg",
+  "Trung": "avatars/trung.jpg",
+  "Hào": "avatars/Hao.jpg",
+  "Trí": "avatars/Tri.jpg",
   "Tú Anh": "avatars/Tuanh.jpg",
-  Thạnh: "avatars/Thanh.jpg",
-  Mai: "avatars/Mai.jpg",
-  Hùng: "avatars/avat.jpeg",
-
-  // "Huy": "avatars/huy.jpg",
+  "Thạnh": "avatars/Thanh.jpg",
+  "Mai": "avatars/Mai.jpg",
+  "Hùng": "avatars/avat.jpeg",
 };
 // Chuẩn hoá mỗi tên đã map thành các "từ" (token) để so khớp theo từ.
 const _NAME_AVATAR_ENTRIES = Object.entries(NAME_AVATARS).map(([k, v]) => {
@@ -2586,7 +2584,11 @@ function pollLink(pid) {
 function copyPollLink(pid, silent) {
   const url = pollLink(pid);
   const done = () =>
-    showToast(silent ? "Vote link copied — share it with the group" : "Copied");
+    showToast(
+      silent
+        ? "Vote link copied — share it with the group"
+        : "Copied",
+    );
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
       .writeText(url)
@@ -2604,7 +2606,8 @@ function manageLink(pid) {
 }
 function copyManageLink(pid, silent) {
   const url = manageLink(pid);
-  const done = () => showToast(silent ? t("manageLinkCopied") : t("copied"));
+  const done = () =>
+    showToast(silent ? t("manageLinkCopied") : t("copied"));
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
       .writeText(url)
@@ -3236,9 +3239,7 @@ async function submitHostCreatePollModal() {
             nameKey: nameKey(name),
             avatar: ls("hl_voter_avatar") || null,
           })
-          .catch((err) =>
-            console.error("Couldn't save creator's own vote", err),
-          );
+          .catch((err) => console.error("Couldn't save creator's own vote", err));
       }
       renderHostCreateModalSuccess(ref.key);
     })
@@ -3620,11 +3621,13 @@ function refreshNoShowChips(pid) {
     }),
   );
   const checkedKeys = [];
-  document.querySelectorAll("#hm-noshow-list .ns-row").forEach((row) => {
-    const cb = row.querySelector('input[type="checkbox"]');
-    if (cb && cb.checked && row.dataset.namekey)
-      checkedKeys.push(row.dataset.namekey);
-  });
+  document
+    .querySelectorAll("#hm-noshow-list .ns-row")
+    .forEach((row) => {
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (cb && cb.checked && row.dataset.namekey)
+        checkedKeys.push(row.dataset.namekey);
+    });
   const chipsHtml = checkedKeys
     .map((k) => byKey.get(k))
     .filter(Boolean)
@@ -3642,7 +3645,7 @@ function refreshNoShowChips(pid) {
 function clearAllNoShow(pid) {
   tempNoShows = {};
   document
-    .querySelectorAll('#hm-noshow-list .ns-row input[type="checkbox"]')
+    .querySelectorAll("#hm-noshow-list .ns-row input[type=\"checkbox\"]")
     .forEach((cb) => {
       cb.checked = false;
     });
@@ -3770,8 +3773,7 @@ function renderHostCostLines() {
   }
   wrap.innerHTML = tempHostCosts
     .map((c) => {
-      const shortVal =
-        c.amount > 0 ? Math.round(c.amount).toLocaleString("en-US") : "";
+      const shortVal = c.amount > 0 ? Math.round(c.amount).toLocaleString("en-US") : "";
       const isCourt = isCourtFeeCost(c.name);
       return `<div class="cost-line" data-cid="${c.id}">
       <input class="cost-name-inp" type="text" placeholder="Cost name…" value="${esc(c.name)}"
@@ -4400,10 +4402,7 @@ function renderPollInfoTab(p) {
       .filter((m) => !m.noShow)
       .map((m) => m.amount);
     let perPersonAmt;
-    if (
-      nonNoShowAmounts.length < (sc.members || []).length &&
-      nonNoShowAmounts.length > 0
-    ) {
+    if (nonNoShowAmounts.length < (sc.members || []).length && nonNoShowAmounts.length > 0) {
       perPersonAmt = Math.min(...nonNoShowAmounts);
     } else {
       const memberCount =
@@ -4900,8 +4899,7 @@ function computeSelfServeCost(poll) {
     let amount = 0;
     costs.forEach((c) => {
       if (isCourtFeeCost(c.name)) {
-        amount +=
-          totalWeight > 0 ? ((c.amount || 0) * a.weight) / totalWeight : 0;
+        amount += totalWeight > 0 ? ((c.amount || 0) * a.weight) / totalWeight : 0;
       } else {
         const w = otherWeight(a);
         if (w > 0 && otherTotalWeight > 0) {
@@ -5012,15 +5010,7 @@ function renderPaymentTab(p) {
         <div style="font-size:16px;font-weight:600;color:var(--green)">${fmt(sc.collected)}</div>
       </div>
     </div>
-    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px;display:flex;align-items:center;gap:6px">${t("costs")} <span style="font-size:15px;font-weight:700;color:var(--text)">${sc.splitCount != null ? sc.splitCount : (sc.members || []).length}</span>${(() => {
-      const ns = (sc.members || []).reduce(
-        (s, m) => s + (m.noShowCount || (m.noShow ? 1 : 0)),
-        0,
-      );
-      return ns > 0
-        ? ` <span style="font-size:11px;font-weight:400;color:var(--hint);text-transform:none;letter-spacing:0">(${ns} no-show)</span>`
-        : "";
-    })()}</div>
+    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px;display:flex;align-items:center;gap:6px">${t("costs")} <span style="font-size:15px;font-weight:700;color:var(--text)">${sc.splitCount != null ? sc.splitCount : (sc.members || []).length}</span>${(() => { const ns = (sc.members || []).reduce((s, m) => s + (m.noShowCount || (m.noShow ? 1 : 0)), 0); return ns > 0 ? ` <span style="font-size:11px;font-weight:400;color:var(--hint);text-transform:none;letter-spacing:0">(${ns} no-show)</span>` : ""; })()}</div>
     ${costLines || `<div style="font-size:12px;color:var(--hint)">${t("noCosts")}</div>`}
     <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">${t("members")}</div>
     ${memberLines || `<div style="font-size:12px;color:var(--hint)">${t("noMembers")}</div>`}
