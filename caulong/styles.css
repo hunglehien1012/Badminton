@@ -86,6 +86,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 /* BUTTONS */
 .btn{display:inline-flex;align-items:center;gap:5px;border-radius:var(--rs);font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;transition:all .15s;padding:8px 14px;border:1px solid var(--border-s)}
+.btn:disabled{opacity:.45;cursor:not-allowed;pointer-events:none}
 .btn-primary{background:var(--text);color:#fff;border-color:var(--text)}
 .btn-primary:hover{opacity:.85}
 .btn-green{background:var(--green);color:#fff;border-color:var(--green)}
@@ -117,9 +118,15 @@ body.host-mode #host-view{display:block}
 .host-view-hd{background:var(--blue);color:#fff;padding:16px 18px;font-size:16px;font-weight:700}
 #modal-host-create .modal-hd{background:var(--blue);border-bottom:none;padding:16px 18px}
 #modal-host-create .modal-title{color:#fff;font-size:16px}
-#modal-host-create .btn-icon{color:#fff}
-#modal-host-create .btn-icon:hover{color:#fff;opacity:.75}
+#modal-host-create .modal-hd .btn-icon{color:#fff}
+#modal-host-create .modal-hd .btn-icon:hover{color:#fff;opacity:.75}
 #modal-host-create .modal-ft{justify-content:flex-end;gap:14px}
+.fb-opt.vp-opt-edit{cursor:default}
+.fb-opt.vp-opt-edit:hover{border-color:var(--border)}
+.fb-opt.vp-opt-edit.selectable{cursor:pointer}
+.fb-opt.vp-opt-edit.selectable:hover{border-color:var(--border-s)}
+.vp-option-del{flex-shrink:0}
+#vv-modal-submit-btn{background:var(--blue);border-color:var(--blue)}
 #hc-modal-footer:empty{display:none}
 .vv-btn{flex:1;padding:14px;font-size:15px;font-weight:600;border-radius:var(--r);border:2px solid var(--border-s);background:var(--surface);cursor:pointer;transition:all .15s;font-family:inherit}
 .vv-vote-btn{width:100%;justify-content:center;margin-top:4px;font-weight:700;font-size:15px;padding:14px;border-radius:14px;border:none;background:var(--bg);color:var(--text);cursor:pointer;font-family:inherit;transition:all .15s;box-shadow:0 0 0 0 rgba(0,0,0,0)}
@@ -221,7 +228,7 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
 .md-tab.active{color:var(--green);border-bottom-color:var(--green)}
 .md-panel{display:none}
 .md-panel.active{display:block}
-.info-row{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border)}
+.info-row{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);position:relative}
 .info-row:last-child{border-bottom:none}
 .info-row .info-ico{width:22px;flex-shrink:0;color:var(--text);display:flex;align-items:flex-start;justify-content:center;padding-top:2px}
 .info-row .info-ico svg{width:20px;height:20px;flex-shrink:0}
@@ -230,6 +237,11 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
 .info-row .info-sub{font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5}
 .info-row .info-link{font-size:13px;color:var(--blue);font-weight:600;margin-top:8px;display:inline-block;text-decoration:none;cursor:pointer}
 .info-row .info-link:hover{text-decoration:underline}
+.info-copy-btn{position:absolute;right:0;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;transition:background .15s}
+.info-copy-btn:hover{background:var(--bg)}
+.info-copy-btn svg{width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.info-copy-btn.copied{background:#E1F5EE;border-color:#1D9E75}
+.info-copy-btn.copied svg{stroke:#1D9E75}
 
 /* EXPORT PAGE */
 .export-player-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .15s;box-shadow:var(--shadow)}
@@ -334,3 +346,48 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
   .jira-prompt-ft{flex-direction:column-reverse}
   .jira-btn{width:100%;text-align:center}
 }
+/* ─── NO-SHOW MULTI-SELECT (search + checkbox list, "Select members" style) ─── */
+.ns-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--border);border-radius:var(--rs);padding:6px 10px;background:var(--bg);font-size:13px;cursor:pointer;color:var(--text);user-select:none;min-height:38px}
+.ns-trigger:hover{border-color:var(--border-s)}
+.ns-trigger.open{border-color:var(--blue)}
+.ns-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;flex:1;min-width:0}
+.ns-trigger-placeholder{color:var(--hint)}
+.ns-chip{display:flex;align-items:center;gap:6px;background:var(--bg);border-radius:999px;padding:3px 8px 3px 3px;font-size:12.5px;color:var(--text);max-width:100%}
+.ns-chip-avatar{width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff}
+.ns-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px}
+.ns-chip-remove{cursor:pointer;color:var(--hint);font-size:14px;line-height:1;padding:0 1px;flex-shrink:0;transition:color .15s}
+.ns-chip-remove:hover{color:var(--coral)}
+.ns-trigger-chev{color:var(--hint);font-size:11px;flex-shrink:0;transition:transform .15s}
+.ns-trigger.open .ns-trigger-chev{transform:rotate(180deg)}
+.ns-panel{display:none;position:absolute;left:0;right:0;bottom:100%;top:auto;margin-bottom:6px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);box-shadow:0 -6px 20px rgba(0,0,0,.1);overflow:hidden;z-index:20}
+.ns-panel.open{display:block}
+.ns-search-wrap{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border)}
+.ns-search-wrap input{flex:1;min-width:0}
+.ns-clear-all{font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;text-decoration:none}
+.ns-clear-all:hover{color:var(--text);text-decoration:underline}
+.ns-list{max-height:180px;overflow-y:auto}
+.ns-row{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;font-size:13px}
+.ns-row:hover{background:var(--bg)}
+.ns-row input[type=checkbox]{width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--blue);margin:0}
+.ns-row-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff}
+.ns-row-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ns-row-extra{font-size:11px;color:var(--hint);flex-shrink:0}
+.ns-empty{padding:14px 12px;text-align:center;font-size:12px;color:var(--hint)}
+
+/* ─── MANAGE YOUR VOTE — field label/input style (Name/Description reference) ─── */
+.hm-form label.field-label{font-size:14px;color:var(--text);font-weight:600;text-transform:none;letter-spacing:normal;margin-bottom:6px}
+.hm-form input[type=text],.hm-form input[type=number],.hm-form input[type=date],.hm-form select{border-radius:10px;padding:10px 12px;font-size:14px;border-color:var(--border);background:var(--surface);height:44px;box-sizing:border-box}
+.hm-form input::placeholder{color:var(--hint)}
+.hm-form .ns-trigger{background:var(--surface)}
+/* Chrome/Safari reserve extra box space for the number spinner even when
+   it's visually tiny, which is what made the amount field look shorter
+   than the name field next to it — remove it and lock both to the same
+   height above instead. */
+.hm-form input[type=number]::-webkit-outer-spin-button,
+.hm-form input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.hm-form input[type=number]{-moz-appearance:textfield}
+/* Belt-and-suspenders: target the two cost-line inputs directly by class so
+   nothing else in the cascade can re-introduce a height mismatch between them. */
+.hm-form .cost-name-inp,.hm-form .cost-k{height:44px!important;padding:10px 12px!important;box-sizing:border-box!important;line-height:20px}
+.hm-cost-remove{background:transparent;border:none;cursor:pointer;color:var(--muted);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s}
+.hm-cost-remove:hover{background:var(--bg);color:var(--text)}
