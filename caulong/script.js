@@ -1158,8 +1158,8 @@ const VOTER_STRINGS = {
     vi: "Chưa có ai tham gia bình chọn.",
   },
   paymentPending: {
-    en: "Brian will update payment info once the session is created.",
-    vi: "Brian sẽ cập nhật thông tin thanh toán khi buổi được tạo.",
+    en: "{name} will update payment info once the session is created.",
+    vi: "{name} sẽ cập nhật thông tin thanh toán khi buổi được tạo.",
   },
   collected: { en: "Collected", vi: "Đã thu" },
   progress: { en: "Progress", vi: "Tiến độ" },
@@ -4901,9 +4901,10 @@ function renderPaymentTab(p) {
   const sc = p.sessionCost || computeSelfServeCost(p);
 
   if (!sc) {
+    const organizerName = (p && p.organizer && p.organizer.trim()) || "Brian";
     return `<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 10px;line-height:1.6">
       <br>
-      ${t("paymentPending")}
+      ${t("paymentPending").replace("{name}", esc(organizerName))}
     </div>`;
   }
   if (sc.needsTieBreak) {
