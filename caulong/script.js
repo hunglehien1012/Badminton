@@ -761,9 +761,9 @@ function toggleMonth(key) {
 
 // ─── NEW / EDIT SESSION MODAL ──────────────────────────────────────
 const COST_PRESETS = [
-  { name: "Court Fee", emoji: "🏟️", amount: 200 },
-  { name: "Water Fee", emoji: "💧", amount: 20 },
-  { name: "Shuttle Fee", emoji: "🏸", amount: 0 },
+  { name: "Tiền sân", emoji: "🏟️", amount: 200 },
+  { name: "Tiền nước", emoji: "💧", amount: 20 },
+  { name: "Tiền cầu", emoji: "🏸", amount: 0 },
 ];
 
 function openNewSession() {
@@ -3343,15 +3343,7 @@ function updateHostSaveButtonState() {
 function renderHostManageForm(pid, p) {
   const body = document.getElementById("host-body");
   tempHostCosts =
-    p.costs && p.costs.length > 0
-      ? p.costs.map((c) => ({ ...c }))
-      : COST_PRESETS.map((pr) => ({
-          id: uid(),
-          name: pr.name,
-          emoji: pr.emoji,
-          amount: pr.amount * 1000,
-          qty: "",
-        }));
+    p.costs && p.costs.length > 0 ? p.costs.map((c) => ({ ...c })) : [];
   tempNoShows = { ...(p.noShows || {}) };
   tempCostBasisOptionId = p.costBasisOptionId || null;
   const attendanceOptions = computeOptionAttendance(p).filter(
