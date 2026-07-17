@@ -3071,7 +3071,7 @@ async function openMyHostedVotesModal() {
   body.innerHTML = `
     <div style="margin-bottom:10px">
       <label class="field-label">Your name</label>
-      <input type="text" id="mhv-name" placeholder="Name matching the Organizer field" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}" onkeydown="if(event.key==='Enter'){loadMyHostedVotes();}">
+      <input type="text" id="mhv-name" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}" onkeydown="if(event.key==='Enter'){loadMyHostedVotes();}">
     </div>
     <button class="vv-vote-btn" onclick="loadMyHostedVotes()">Show my votes</button>
   `;
@@ -3106,7 +3106,7 @@ function loadMyHostedVotes() {
         .join("");
       body.innerHTML =
         rows ||
-        `<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No votes with "${esc(name)}" as Organizer were found.</div>`;
+        `<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No votes with "${esc(name)}" were found.</div>`;
     })
     .catch((err) => {
       console.error(err);
