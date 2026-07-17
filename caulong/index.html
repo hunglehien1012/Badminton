@@ -297,6 +297,26 @@
   </div>
 </div>
 
+<!-- ══════════════ MODAL: CHỌN TÊN TỪ DANH SÁCH MEMBER (single-select) ══════════════ -->
+<div class="modal-backdrop" id="modal-name-picker">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title">Select your name</span>
+      <button class="btn-icon" onclick="closeNamePickerModal()" style="font-size:20px">×</button>
+    </div>
+    <div class="modal-bd">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="np-hint"></div>
+      <div class="ns-search-wrap" style="border:1px solid var(--border);border-radius:var(--rs);margin-bottom:10px">
+        <input type="text" id="np-search" placeholder="Search member" oninput="renderNamePickerList(this.value)" autocomplete="off">
+      </div>
+      <div class="ns-list" id="np-list" style="max-height:320px"></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeNamePickerModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════ MODAL: CREATE YOUR OWN VOTE (self-serve, no login) ══════════════ -->
 <div class="modal-backdrop" id="modal-host-create">
   <div class="modal">
