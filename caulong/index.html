@@ -202,11 +202,6 @@
       <div style="margin-bottom:10px">
         <label class="field-label">Vote Options</label>
         <div id="vp-options"></div>
-        <div class="input-row" style="margin-top:6px">
-          <input type="text" id="vp-new-option-label" placeholder="Option label…" maxlength="30"
-            onkeydown="if(event.key==='Enter'){addPollOption();}">
-          <button class="btn btn-ghost btn-sm" onclick="addPollOption()" style="white-space:nowrap">+ Add</button>
-        </div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" id="vote-create-btn" onclick="createPoll()">+ Create Vote</button>
@@ -272,7 +267,7 @@
     </div>
     <div class="md-tabs" id="md-tabs">
       <button class="md-tab active" data-mdtab="info" onclick="switchDetailTab('info')">Chi tiết</button>
-      <button class="md-tab" data-mdtab="vote" onclick="switchDetailTab('vote')">Vote</button>
+      <button class="md-tab" data-mdtab="vote" onclick="switchDetailTab('vote')">Thanh toán</button>
     </div>
     <div class="modal-bd">
       <div class="md-panel active" id="md-panel-info"></div>
