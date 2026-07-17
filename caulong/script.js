@@ -149,8 +149,8 @@ function nameKey(s) {
 // chưa tự đặt ảnh riêng, ảnh này sẽ tự hiển thị ở mọi nơi (Vote tab,
 // no-show, người tổ chức…). Dán link ảnh thật của bạn vào để thay thế.
 const NAME_AVATARS = {
-  "Dương": "avatars/duong.jpg",
-  "Trung": "avatars/trung.jpg",
+  "Dương": "avatars/Duong.jpg",
+  "Trung": "avatars/Trung.jpg",
   "Hào": "avatars/Hao.jpg",
   "Trí": "avatars/Tri.jpg",
   "Tú Anh": "avatars/Tuanh.jpg",
