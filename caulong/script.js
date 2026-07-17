@@ -4063,13 +4063,8 @@ async function attachVoterLatestListener(attempt) {
       // Link gốc (không có ?poll=) = trang tạo vote, KHÔNG tự mở cuộc vote.
       document.getElementById("vv-body").innerHTML = `
         <div style="text-align:center;padding:14px 6px">
-          <div style="font-size:34px;margin-bottom:6px">🏸</div>
-          <div style="font-size:15px;font-weight:700;margin-bottom:4px">Tạo cuộc vote của bạn</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Tạo một cuộc vote mới để bắt đầu.</div>
-          <button class="btn btn-primary" onclick="openHostCreateModal()" style="width:100%;max-width:280px">+ Create your own vote</button>
-          <div style="margin-top:14px">
-            <span onclick="adminLogin()" style="font-size:12px;color:var(--hint);cursor:pointer;text-decoration:underline">Đăng nhập Brian (admin)</span>
-          </div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:16px">Tạo cuộc vote của bạn</div>
+          <button class="btn btn-primary" onclick="openHostCreateModal()" style="width:100%;max-width:280px;justify-content:center;background:var(--blue);border-color:var(--blue);color:#fff">Create vote</button>
         </div>`;
       return;
     },
