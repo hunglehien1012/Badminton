@@ -148,19 +148,21 @@ function nameKey(s) {
 // nào, kể cả xen giữa như "007") hoặc chữ "bảy" cũng bị chặn.
 const BLOCKED_NAME_SUBSTRINGS = ["nuru", "brian", "nauy", "nu"];
 function normalizeForNameBlockCheck(s) {
-  return (s || "")
-    .normalize("NFD")
-    // Strip only the 5 Vietnamese TONE marks (sắc/huyền/hỏi/ngã/nặng) —
-    // deliberately NOT the full \u0300-\u036f range, because that range also
-    // covers the horn/breve/circumflex marks that turn "u"/"o"/"a"/"e" into
-    // entirely different letters ("ư"/"ơ"/"ă"/"â"/"ê"/"ô"). Stripping those
-    // too would wrongly collapse e.g. "Nữ" down to "nu" and trip the "nu"
-    // filter on a completely unrelated name.
-    .replace(/[\u0300\u0301\u0303\u0309\u0323]/g, "")
-    .normalize("NFC") // recompose the remaining accented letters back into single characters
-    .replace(/đ/g, "d")
-    .toLowerCase()
-    .replace(/\s+/g, "");
+  return (
+    (s || "")
+      .normalize("NFD")
+      // Strip only the 5 Vietnamese TONE marks (sắc/huyền/hỏi/ngã/nặng) —
+      // deliberately NOT the full \u0300-\u036f range, because that range also
+      // covers the horn/breve/circumflex marks that turn "u"/"o"/"a"/"e" into
+      // entirely different letters ("ư"/"ơ"/"ă"/"â"/"ê"/"ô"). Stripping those
+      // too would wrongly collapse e.g. "Nữ" down to "nu" and trip the "nu"
+      // filter on a completely unrelated name.
+      .replace(/[\u0300\u0301\u0303\u0309\u0323]/g, "")
+      .normalize("NFC") // recompose the remaining accented letters back into single characters
+      .replace(/đ/g, "d")
+      .toLowerCase()
+      .replace(/\s+/g, "")
+  );
 }
 // Names may only use Vietnamese or English letters (plus space, apostrophe,
 // period, hyphen) — this blocks emoji, other scripts (Chinese, Cyrillic…),
@@ -485,10 +487,17 @@ function syncSessionCostToPoll(session) {
   const costs = session.costs.map((c) => {
     const names = c.memberIds.map((id) => {
       const m = session.members.find((mm) => mm.id === id);
-      return m ? m.name : id;
+      const nm = m ? m.name : id;
+      const g = m && m.guestCount ? m.guestCount : 0;
+      return g > 0 ? `${nm} +${g}` : nm;
     });
-    const perPerson =
-      c.memberIds.length > 0 ? c.amount / c.memberIds.length : 0;
+    // Divide by weighted headcount (each member's seat + their guests) so the
+    // /person figure matches what members actually owe.
+    const lineWeight = c.memberIds.reduce(
+      (sum, id) => sum + memberWeight(session, id),
+      0,
+    );
+    const perPerson = lineWeight > 0 ? c.amount / lineWeight : 0;
     return {
       name: c.name || "Cost",
       emoji: c.emoji || "🗒️",
@@ -506,6 +515,10 @@ function syncSessionCostToPoll(session) {
   const collected = membersSnap
     .filter((m) => m.paid)
     .reduce((s, m) => s + m.amount, 0);
+  const splitCount = activeMembers.reduce(
+    (sum, m) => sum + memberWeight(session, m.id),
+    0,
+  );
   fdb
     .ref(POLLS_ROOT + "/" + session.pollId + "/sessionCost")
     .set({
@@ -517,6 +530,7 @@ function syncSessionCostToPoll(session) {
       pending: total - collected,
       costs,
       members: membersSnap,
+      splitCount,
       updatedAt: Date.now(),
     })
     .catch((err) => console.error("Sync session cost to poll failed", err));
@@ -555,7 +569,7 @@ function linkPollToSession(pid, sid) {
   ss("hl_sessions", sessions);
   syncSessionCostToPoll(s);
   renderPollList();
-  showToast("Session linked to vote 🔗");
+  showToast("Session linked to vote");
 }
 
 // ─── SESSION → PLAIN TEXT (for pasting into Messenger/Zalo groups) ──
@@ -599,7 +613,7 @@ function copySessionText(sid) {
   const s = sessions.find((x) => x.id === sid);
   if (!s) return;
   const text = buildSessionText(s);
-  const done = () => showToast("📋 Copied! Paste it into Messenger");
+  const done = () => showToast("Copied! Paste it into Messenger");
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
       .writeText(text)
@@ -1090,7 +1104,7 @@ function saveSession() {
   ss("hl_sessions", sessions);
   closeModal("modal-session");
   renderSessions();
-  showToast(editingSessionId ? "Session updated" : "New session created 🏸");
+  showToast(editingSessionId ? "Session updated" : "New session created");
 }
 
 // ─── SESSION DETAIL MODAL ─────────────────────────────────────────
@@ -1161,6 +1175,10 @@ const VOTER_STRINGS = {
   owes: { en: "Owes", vi: "Còn nợ" },
   paidBadge: { en: "✓ Paid", vi: "✓ Đã trả" },
   notPaidBadge: { en: "Not paid", vi: "Chưa trả" },
+  totalCostLabel: { en: "total", vi: "tổng cộng" },
+  perPersonCostLabel: { en: "per player", vi: "cho mỗi người chơi" },
+  perNoShowCostLabel: { en: "per no-show", vi: "cho mỗi người vắng mặt" },
+  goToPayment: { en: "Payment", vi: "Thanh toán" },
 };
 function t(key) {
   const entry = VOTER_STRINGS[key];
@@ -1178,6 +1196,7 @@ function mapsLink(address) {
 // Line-style icons (used in the "Chi tiết" info rows) matching the reference design.
 const ICON_CALENDAR = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="8" y1="3" x2="8" y2="7"></line><line x1="16" y1="3" x2="16" y2="7"></line><polyline points="8 13 11 16 16 10"></polyline></svg>`;
 const ICON_PIN = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>`;
+const ICON_TAG = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41L11 3.83A2 2 0 0 0 9.59 3.24L4 3a1 1 0 0 0-1 1l.24 5.59a2 2 0 0 0 .59 1.41l9.58 9.58a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.82z"></path><circle cx="7.5" cy="7.5" r="1.2" fill="currentColor" stroke="none"></circle></svg>`;
 
 // Prefer an explicitly-pasted Google Maps link; fall back to an
 // auto-generated search link built from the address text.
@@ -1226,6 +1245,30 @@ function renderDetailInfoTab(s) {
       </div>
     </div>`;
   }
+
+  // Cost summary: total + per-person, with a link into the Payment tab.
+  const activeMembers = s.members.filter((m) => calcMemberAmount(s, m.id) > 0);
+  const totalAmt = activeMembers.reduce(
+    (sum, m) => sum + calcMemberAmount(s, m.id),
+    0,
+  );
+  // Divide by the weighted headcount (includes "+N" guests folded into a
+  // member's own weight) — the same denominator calcMemberAmount uses to
+  // split each cost line, so this stays consistent with the Payment tab.
+  const perPersonCount = activeMembers.reduce(
+    (sum, m) => sum + memberWeight(s, m.id),
+    0,
+  );
+  const perPersonAmt = perPersonCount > 0 ? totalAmt / perPersonCount : 0;
+
+  html += `<div class="info-row">
+      <div class="info-ico">${ICON_TAG}</div>
+      <div class="info-main">
+        <div class="info-title">${fmt(totalAmt)} tổng cộng</div>
+        <div class="info-title">${fmt(perPersonAmt)} cho mỗi người chơi</div>
+        <a class="info-link" onclick="switchDetailTab('vote')">Thanh toán</a>
+      </div>
+    </div>`;
 
   return html;
 }
@@ -1353,7 +1396,7 @@ function togglePaid(sid, mid) {
   syncSessionCostToPoll(s);
   openDetail(sid);
   renderSessions();
-  showToast(m.paid ? "✓ " + m.name + " paid" : m.name + " payment undone");
+  showToast(m.paid ? m.name + " paid" : m.name + " payment undone");
 }
 
 function markAllPaid(sid) {
@@ -1369,7 +1412,7 @@ function markAllPaid(sid) {
   syncSessionCostToPoll(s);
   openDetail(sid);
   renderSessions();
-  showToast("✓ All marked as paid");
+  showToast("All marked as paid");
 }
 
 async function deleteSession(sid) {
@@ -1847,7 +1890,7 @@ function backupData() {
     URL.revokeObjectURL(a.href);
     document.body.removeChild(a);
   }, 500);
-  showToast("💾 Backed up: " + fname);
+  showToast("Backed up: " + fname);
 }
 
 function restoreData(input) {
@@ -1923,7 +1966,7 @@ async function doExportImage() {
     if (!m) continue;
     await exportMemberImage(m, filteredSessions, from, to, hidePaid);
   }
-  showToast("🖼️ Exported " + selectedIds.length + " image(s)");
+  showToast("Exported " + selectedIds.length + " image(s)");
 }
 
 async function exportMemberImage(
@@ -2199,21 +2242,63 @@ function pollOptions(p) {
 
 // ─── Poll options editor (used inside the Create/Edit Vote card) ──
 let tempPollOptions = DEFAULT_POLL_OPTIONS.map((o) => ({ ...o }));
+// Which container/input the shared options-editor functions below should
+// target. There are THREE separate places that show an options editor (admin
+// Vote tab, the public "Create your own vote" modal, and the self-serve
+// "Manage vote" page) — each must use its OWN element ids, otherwise
+// document.getElementById() always resolves to whichever one appears first
+// in the page, silently rendering into the wrong (often hidden) container.
+// Whoever opens an options editor should set these two ids first.
+let pollOptionsWrapId = "vp-options";
+let pollNewOptionInputId = "vp-new-option-label";
+// Whether the "+ Add option" row is currently expanded into an inline text
+// field — mirrors vvShowAddOptionInput on the voter "Select your options"
+// modal, so both places look and behave identically.
+let pollAddOptionEditing = false;
+// Whether the options above can be tapped to select/deselect them (used by
+// the "Create your own vote" modal so the host can already vote for
+// themself while creating, without needing to reopen the vote afterwards).
+let pollOptionsSelectable = false;
+let pollSelectedOptionIds = new Set();
+function togglePollOptionSelection(oid) {
+  if (!pollOptionsSelectable) return;
+  if (pollSelectedOptionIds.has(oid)) pollSelectedOptionIds.delete(oid);
+  else pollSelectedOptionIds.add(oid);
+  renderPollOptionsEditor();
+}
 
 function renderPollOptionsEditor() {
-  const wrap = document.getElementById("vp-options");
+  const wrap = document.getElementById(pollOptionsWrapId);
   if (!wrap) return;
-  wrap.innerHTML = tempPollOptions
-    .map(
-      (o) => `
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-      <input type="text" value="${esc(o.label)}" maxlength="30" placeholder="Option label…" style="flex:1"
+  const rows = tempPollOptions
+    .map((o) => {
+      const sel = pollOptionsSelectable && pollSelectedOptionIds.has(o.id);
+      return `
+    <div class="fb-opt vp-opt-edit ${pollOptionsSelectable ? "selectable" : ""} ${sel ? "sel" : ""}"
+      ${pollOptionsSelectable ? `onclick="togglePollOptionSelection('${o.id}')"` : ""}>
+      <span class="fb-check">${sel ? "✓" : ""}</span>
+      <input type="text" value="${esc(o.label)}" maxlength="30" placeholder="Option label…"
+        style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:500;color:var(--text)"
+        onclick="event.stopPropagation()"
         oninput="updatePollOptionField('${o.id}','label',this.value)">
-      <button class="btn-icon" onclick="removePollOption('${o.id}')" title="Delete option"
+      <button class="btn-icon vp-option-del" onclick="event.stopPropagation();removePollOption('${o.id}')" title="Delete option"
         ${tempPollOptions.length <= 1 ? 'disabled style="opacity:.3;cursor:not-allowed"' : ""}>×</button>
-    </div>`,
-    )
+    </div>`;
+    })
     .join("");
+  const addRow = pollAddOptionEditing
+    ? `<div class="fb-opt fb-opt-editing">
+        <span class="fb-check"></span>
+        <input type="text" id="${pollNewOptionInputId}" maxlength="30" autocomplete="off"
+          style="flex:1;border:none;background:transparent;padding:0;font-size:15px;font-weight:500;color:var(--text)"
+          onkeydown="if(event.key==='Enter'){this.blur();} if(event.key==='Escape'){this.dataset.cancel='1';this.blur();}"
+          onblur="handlePollAddOptionBlur(this)">
+      </div>`
+    : `<div class="fb-add-option" onclick="showPollAddOptionField()">
+        <span class="fb-add-circle">+</span>
+        <span class="fb-add-label">Add option…</span>
+      </div>`;
+  wrap.innerHTML = rows + addRow;
 }
 
 function updatePollOptionField(oid, field, value) {
@@ -2238,8 +2323,7 @@ async function removePollOption(oid) {
     const p = pollsCache[editingPollId];
     const voteCount =
       p && p.votes
-        ? mergedPollVotes(p).filter((v) => voteChoices(v).includes(oid))
-            .length
+        ? mergedPollVotes(p).filter((v) => voteChoices(v).includes(oid)).length
         : 0;
     if (voteCount > 0) {
       const ok = await showConfirm({
@@ -2252,20 +2336,41 @@ async function removePollOption(oid) {
     }
   }
   tempPollOptions = tempPollOptions.filter((o) => o.id !== oid);
+  pollSelectedOptionIds.delete(oid);
   renderPollOptionsEditor();
 }
 
-function addPollOption() {
-  const labelInp = document.getElementById("vp-new-option-label");
-  const label = labelInp.value.trim();
-  if (!label) {
-    showToast("Enter an option label first");
-    return;
-  }
-  tempPollOptions.push({ id: uid(), label });
-  labelInp.value = "";
+// Expands the "+ Add option" row into an inline text field, styled exactly
+// like the existing option rows above it (same component used on the voter
+// "Select your options" modal — see showAddOptionField()).
+function showPollAddOptionField() {
+  pollAddOptionEditing = true;
   renderPollOptionsEditor();
-  labelInp.focus();
+  setTimeout(() => {
+    const inp = document.getElementById(pollNewOptionInputId);
+    if (inp) inp.focus();
+  }, 0);
+}
+function cancelPollAddOptionField() {
+  pollAddOptionEditing = false;
+  renderPollOptionsEditor();
+}
+// No explicit confirm/cancel buttons: leaving the field (blur) is what
+// commits it. Typed something → add it as a new option. Left empty (or
+// Escape was pressed) → just collapse back to the "+ Add option" row.
+function handlePollAddOptionBlur(inputEl) {
+  const cancelled = inputEl && inputEl.dataset.cancel === "1";
+  const val = inputEl ? inputEl.value.trim() : "";
+  setTimeout(() => {
+    if (!pollAddOptionEditing) return; // already handled elsewhere
+    if (cancelled || !val) {
+      cancelPollAddOptionField();
+    } else {
+      tempPollOptions.push({ id: uid(), label: val });
+      pollAddOptionEditing = false;
+      renderPollOptionsEditor();
+    }
+  }, 100);
 }
 
 function renderVotePage() {
@@ -2284,6 +2389,11 @@ function renderVotePage() {
       .toISOString()
       .slice(0, 10);
   }
+  pollOptionsWrapId = "vp-options";
+  pollNewOptionInputId = "vp-new-option-label";
+  pollAddOptionEditing = false;
+  pollOptionsSelectable = false;
+  pollSelectedOptionIds = new Set();
   listenPolls();
   renderPollOptionsEditor();
   renderPollList();
@@ -2338,7 +2448,7 @@ function createPoll() {
       .ref(POLLS_ROOT + "/" + editingPollId)
       .update({ date, note, address, mapsUrl, organizer, options })
       .then(() => {
-        showToast("Vote updated ✏️");
+        showToast("Vote updated");
         cancelEditPoll();
       })
       .catch((err) => {
@@ -2368,7 +2478,7 @@ function createPoll() {
       document.getElementById("vp-address").value = "";
       document.getElementById("vp-maps-link").value = "";
       document.getElementById("vp-organizer").value = "";
-      showToast("Vote created 🗳️");
+      showToast("Vote created");
       copyPollLink(ref.key, true);
     })
     .catch((err) => {
@@ -2423,8 +2533,8 @@ function copyPollLink(pid, silent) {
   const done = () =>
     showToast(
       silent
-        ? "Vote link copied 📋 — share it with the group"
-        : "Link copied 📋",
+        ? "Vote link copied — share it with the group"
+        : "Copied",
     );
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
@@ -2445,7 +2555,9 @@ function copyManageLink(pid, silent) {
   const url = manageLink(pid);
   const done = () =>
     showToast(
-      silent ? "Manage link copied 📋 — save it somewhere safe!" : "Link copied 📋",
+      silent
+        ? "Manage link copied — save it somewhere safe!"
+        : "Copied",
     );
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard
@@ -2508,7 +2620,11 @@ function mergedPollVotes(p) {
     const choices = Array.from(
       new Set([...voteChoices(prev), ...voteChoices(v)]),
     );
-    byName.set(key, { ...earlier, choices, avatar: earlier.avatar || later.avatar });
+    byName.set(key, {
+      ...earlier,
+      choices,
+      avatar: earlier.avatar || later.avatar,
+    });
   });
   return Array.from(byName.values());
 }
@@ -2547,7 +2663,7 @@ function clearPollLog(pid) {
     fdb
       .ref(POLLS_ROOT + "/" + pid + "/logs")
       .remove()
-      .then(() => showToast("Activity log cleared 🧹"))
+      .then(() => showToast("Activity log cleared"))
       .catch((err) => {
         console.error(err);
         showToast(
@@ -2590,7 +2706,7 @@ async function removePollVoterByName(pid) {
       fdb.ref(POLLS_ROOT + "/" + pid + "/votes/" + devId).remove(),
     ),
   )
-    .then(() => showToast("Voter removed 🗑"))
+    .then(() => showToast("Voter removed"))
     .catch((err) => {
       console.error(err);
       showToast(
@@ -2651,8 +2767,12 @@ async function renamePollVoter(pid) {
     ),
   )
     .then(() => {
-      logVoteEvent(pid, cleanNew, `was renamed by admin (was "${oldName.trim()}")`);
-      showToast("Voter renamed ✏️");
+      logVoteEvent(
+        pid,
+        cleanNew,
+        `was renamed by admin (was "${oldName.trim()}")`,
+      );
+      showToast("Voter renamed");
     })
     .catch((err) => {
       console.error(err);
@@ -2898,18 +3018,13 @@ async function openMyHostedVotesModal() {
       '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">⚠️ The vote system isn\'t configured yet.</div>';
     return;
   }
-  const mine = ls("hl_my_hosted_polls") || [];
-  if (mine.length === 0) {
-    body.innerHTML =
-      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No hosted votes found on this device.</div>';
-    return;
-  }
-  // A shared device may have been used to host votes under several names —
-  // ask which name to filter by, so people don't see each other's votes.
+  // Matching your name against the vote's Organizer field is what grants
+  // access now — this works from any device, not just the one that created
+  // the vote (see loadMyHostedVotes / unlockHostManage).
   body.innerHTML = `
     <div style="margin-bottom:10px">
       <label class="field-label">Your name</label>
-      <input type="text" id="mhv-name" placeholder="Name you hosted under" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}" onkeydown="if(event.key==='Enter'){loadMyHostedVotes();}">
+      <input type="text" id="mhv-name" placeholder="Name matching the Organizer field" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}" onkeydown="if(event.key==='Enter'){loadMyHostedVotes();}">
     </div>
     <button class="vv-vote-btn" onclick="loadMyHostedVotes()">Show my votes</button>
   `;
@@ -2917,26 +3032,21 @@ async function openMyHostedVotesModal() {
 function loadMyHostedVotes() {
   const name = (document.getElementById("mhv-name").value || "").trim();
   if (!name) {
-    showToast("Please enter the name you hosted under");
+    showToast("Please enter your name");
     return;
   }
   const key = nameKey(name);
   const body = document.getElementById("hc-modal-body");
-  const mine = ls("hl_my_hosted_polls") || [];
   body.innerHTML =
     '<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Loading…</div>';
-  ensureFirebaseAuth().then(() => {
-    Promise.all(
-      mine.map((pid) =>
-        fdb
-          .ref(POLLS_ROOT + "/" + pid)
-          .once("value")
-          .then((s) => [pid, s.val()])
-          .catch(() => [pid, null]),
-      ),
-    ).then((results) => {
-      const rows = results
+  ensureFirebaseAuth()
+    .then(() => fdb.ref(POLLS_ROOT).once("value"))
+    .then((snap) => {
+      const all = snap.val() || {};
+      ss("hl_voter_locked_name", name); // remember so the manage page can unlock straight away
+      const rows = Object.entries(all)
         .filter(([, p]) => p && nameKey(p.organizer) === key)
+        .sort(([, a], [, b]) => (b.createdAt || 0) - (a.createdAt || 0))
         .map(
           ([pid, p]) => `
         <div class="player-item" style="margin-bottom:8px;cursor:pointer" onclick="closeModal('modal-host-create');location.href='?manage=${pid}'">
@@ -2949,9 +3059,13 @@ function loadMyHostedVotes() {
         .join("");
       body.innerHTML =
         rows ||
-        `<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No votes hosted under "${esc(name)}" found on this device.</div>`;
+        `<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No votes with "${esc(name)}" as Organizer were found.</div>`;
+    })
+    .catch((err) => {
+      console.error(err);
+      body.innerHTML =
+        '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load votes. Please try again later.</div>';
     });
-  });
 }
 async function openHostCreateModal() {
   document.getElementById("hc-modal-title").textContent =
@@ -2972,11 +3086,17 @@ async function openHostCreateModal() {
 }
 function renderHostCreateModalForm() {
   tempPollOptions = DEFAULT_POLL_OPTIONS.map((o) => ({ ...o }));
+  pollOptionsWrapId = "hc-vp-options";
+  pollNewOptionInputId = "hc-vp-new-option-label";
+  pollAddOptionEditing = false;
+  pollOptionsSelectable = true;
+  pollSelectedOptionIds = new Set();
   const body = document.getElementById("hc-modal-body");
   body.innerHTML = `
+    <div class="hm-form">
     <div style="margin-bottom:14px">
       <label class="field-label">Vote title</label>
-      <input type="text" id="hc-title" placeholder="E.g.: Weekend badminton, Dinner plan…" maxlength="60">
+      <input type="text" id="hc-title" placeholder="E.g.: Weekend badminton, Dinner plan… (max 60 characters)" maxlength="60">
     </div>
     <div style="display:flex;gap:12px;margin-bottom:14px">
       <div style="flex:1">
@@ -2989,12 +3109,10 @@ function renderHostCreateModalForm() {
       </div>
     </div>
     <div>
-      <label class="field-label">Options</label>
-      <div id="vp-options"></div>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <input type="text" id="vp-new-option-label" placeholder="Add an option…" style="flex:1" onkeydown="if(event.key==='Enter'){addPollOption();}">
-        <button class="btn btn-ghost btn-sm" onclick="addPollOption()">+ Add</button>
-      </div>
+      <label class="field-label">Vote options</label>
+      <div style="font-size:11px;color:var(--hint);margin-bottom:6px">Tap an option to select your own answer now — no need to vote again after creating.</div>
+      <div id="hc-vp-options"></div>
+    </div>
     </div>
   `;
   renderPollOptionsEditor();
@@ -3030,6 +3148,10 @@ async function submitHostCreatePollModal() {
     showToast("Add at least 1 vote option");
     return;
   }
+  // Only keep selections that still point at a real (non-empty-label) option.
+  const myChoices = Array.from(pollSelectedOptionIds).filter((oid) =>
+    options.some((o) => o.id === oid),
+  );
   const uidVal = await getMyAuthUid();
   if (!uidVal) {
     showToast("Couldn't connect — please try again");
@@ -3052,6 +3174,21 @@ async function submitHostCreatePollModal() {
       if (!mine.includes(ref.key)) {
         mine.push(ref.key);
         ss("hl_my_hosted_polls", mine);
+      }
+      // Vote for myself right away, so I don't have to reopen the vote and
+      // select an option again after creating it.
+      if (myChoices.length > 0) {
+        const devId = effectiveDevId(ref.key);
+        fdb
+          .ref(POLLS_ROOT + "/" + ref.key + "/votes/" + devId)
+          .set({
+            name,
+            choices: myChoices,
+            at: Date.now(),
+            nameKey: nameKey(name),
+            avatar: ls("hl_voter_avatar") || null,
+          })
+          .catch((err) => console.error("Couldn't save creator's own vote", err));
       }
       renderHostCreateModalSuccess(ref.key);
     })
@@ -3109,9 +3246,14 @@ async function initHostManageView(pid) {
         return;
       }
       pollsCache[pid] = p; // so togglePollStatus/deletePoll/clearPollLog/etc. (read pollsCache) work unmodified
-      if (!myUid || p.creatorUid !== myUid) {
-        body.innerHTML =
-          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px;line-height:1.6">🔒 You don\'t have permission to manage this vote.<br>Only the device that created it can edit it here — ask whoever created it to use their own manage link.</div>';
+      const isCreator = !!myUid && p.creatorUid === myUid;
+      const lockedName = (ls("hl_voter_locked_name") || "").trim();
+      const isOrganizerMatch =
+        !!(p.organizer || "").trim() &&
+        !!lockedName &&
+        nameKey(lockedName) === nameKey(p.organizer);
+      if (!isCreator && !isOrganizerMatch) {
+        renderHostManageNameGate(pid, p);
         return;
       }
       renderHostManageForm(pid, p);
@@ -3123,39 +3265,516 @@ async function initHostManageView(pid) {
     },
   );
 }
+// Shown instead of the manage form when neither this device nor the saved
+// name is recognized. Anyone whose name matches the vote's Organizer field
+// can type it in here to unlock editing — access isn't tied to a device or
+// the original manage link anymore.
+function renderHostManageNameGate(pid, p) {
+  const body = document.getElementById("host-body");
+  if (!(p.organizer || "").trim()) {
+    body.innerHTML =
+      '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px;line-height:1.6">🔒 This vote has no Organizer set, so it can only be managed from the device that created it.</div>';
+    return;
+  }
+  body.innerHTML = `
+    <div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0 16px;line-height:1.6">🔒 Only this vote's organizer can manage it.<br>Enter the organizer's name to unlock.</div>
+    <div style="margin-bottom:10px">
+      <label class="field-label">Your name</label>
+      <input type="text" id="hmg-name" placeholder="Enter organizer's name…" maxlength="30" value="${esc((ls("hl_voter_locked_name") || "").trim())}" onkeydown="if(event.key==='Enter'){unlockHostManage('${pid}')}">
+    </div>
+    <button class="vv-vote-btn" onclick="unlockHostManage('${pid}')">Unlock</button>
+  `;
+}
+function unlockHostManage(pid) {
+  const nameInput = document.getElementById("hmg-name");
+  const name = (nameInput.value || "").trim();
+  if (!name) {
+    showToast("Please enter a name");
+    return;
+  }
+  const p = pollsCache[pid];
+  if (!p || nameKey(name) !== nameKey(p.organizer)) {
+    showToast("That name doesn't match this vote's Organizer");
+    return;
+  }
+  ss("hl_voter_locked_name", name);
+  renderHostManageForm(pid, p);
+}
+// Self-serve cost lines for a hosted vote — same shape/idea as the admin
+// session cost lines (name/emoji/amount), but WITHOUT a per-line "apply to"
+// picker: for a self-serve vote there's no admin-managed member list, so
+// every cost line is simply split across everyone counted as attending (see
+// selfServeAttendees / computeSelfServeCost below), weighted by any "+N"
+// guest options they picked.
+let tempHostCosts = [];
+// Pending edits for the Manage-your-vote form — mirrors tempHostCosts:
+// nothing here touches Firebase until "Update" is pressed, so "Cancel"
+// can just discard it by re-rendering from the last known server poll.
+let tempNoShows = {};
+let tempCostBasisOptionId = null;
+// Snapshot of the form right after loading from the server — compared
+// against the live temp state to decide whether "Update" should be enabled.
+let hostManageBaselineSnapshot = null;
+function computeHostFormSnapshot() {
+  const title = (document.getElementById("hm-title")?.value || "").trim();
+  const date = document.getElementById("hm-date")?.value || "";
+  const costs = tempHostCosts
+    .filter((c) => c.name || c.amount > 0)
+    .map((c) => `${c.name || ""}|${c.amount || 0}`)
+    .join(";");
+  const noShows = Object.keys(tempNoShows)
+    .sort()
+    .map((k) => `${k}:${tempNoShows[k]}`)
+    .join(",");
+  return JSON.stringify({
+    title,
+    date,
+    costs,
+    noShows,
+    costBasis: tempCostBasisOptionId || "",
+  });
+}
+function updateHostSaveButtonState() {
+  const btn = document.getElementById("hm-update-btn");
+  if (!btn) return;
+  btn.disabled = computeHostFormSnapshot() === hostManageBaselineSnapshot;
+}
+
 function renderHostManageForm(pid, p) {
   const body = document.getElementById("host-body");
-  tempPollOptions = pollOptions(p).map((o) => ({ ...o }));
+  tempHostCosts =
+    p.costs && p.costs.length > 0
+      ? p.costs.map((c) => ({ ...c }))
+      : COST_PRESETS.map((pr) => ({
+          id: uid(),
+          name: pr.name,
+          emoji: pr.emoji,
+          amount: pr.amount * 1000,
+          qty: "",
+        }));
+  tempNoShows = { ...(p.noShows || {}) };
+  tempCostBasisOptionId = p.costBasisOptionId || null;
+  const attendanceOptions = computeOptionAttendance(p).filter(
+    (o) => o.total > 0,
+  );
+  const maxTotal = attendanceOptions.length
+    ? Math.max(...attendanceOptions.map((o) => o.total))
+    : 0;
+  const tiedOptions = attendanceOptions.filter((o) => o.total === maxTotal);
+  const tieBreakHtml =
+    tiedOptions.length > 1
+      ? `<div style="margin-bottom:16px">
+      <label class="field-label">Cost basis (tie)</label>
+      <div style="font-size:11px;color:var(--hint);margin-bottom:6px">${tiedOptions.length} options are tied with ${maxTotal} people each. Pick which one the Payment split should be based on:</div>
+      <select id="hm-cost-basis" onchange="tempCostBasisOptionId=this.value||null;updateHostSaveButtonState()">
+        <option value="">— Choose —</option>
+        ${tiedOptions
+          .map(
+            (o) =>
+              `<option value="${o.id}" ${tempCostBasisOptionId === o.id ? "selected" : ""}>${esc(o.label)} (${o.total})</option>`,
+          )
+          .join("")}
+      </select>
+    </div>`
+      : "";
+  // Union of everyone across the attending options — no-show is picked from
+  // this full pool, independent of which option ends up as the cost basis.
+  const allAttendeesMap = new Map();
+  attendanceOptions.forEach((o) =>
+    o.attendees.forEach((a) => {
+      if (!allAttendeesMap.has(a.nameKey)) allAttendeesMap.set(a.nameKey, a);
+    }),
+  );
+  const allAttendees = Array.from(allAttendeesMap.values());
+  const noShowAttendees = allAttendees.filter((a) => tempNoShows[a.nameKey]);
+  const noShowChipsHtml = noShowAttendees
+    .map((a) => noShowChipHtml(pid, a))
+    .join("");
+  const noShowRowsHtml = allAttendees.length
+    ? allAttendees
+        .map((a) => noShowRowHtml(pid, a, !!tempNoShows[a.nameKey]))
+        .join("")
+    : `<div class="ns-empty">No voters yet.</div>`;
   body.innerHTML = `
+    <div class="hm-form">
     <div style="margin-bottom:14px">
       <label class="field-label">Vote title</label>
-      <input type="text" id="hm-title" maxlength="60" value="${esc(p.note || "")}">
-    </div>
-    <div style="margin-bottom:14px">
-      <label class="field-label">Date</label>
-      <input type="date" id="hm-date" value="${esc(p.date || "")}">
+      <input type="text" id="hm-title" maxlength="60" placeholder="(max 60 characters)" value="${esc(p.note || "")}" oninput="updateHostSaveButtonState()">
     </div>
     <div style="margin-bottom:16px">
-      <label class="field-label">Options</label>
-      <div id="vp-options"></div>
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <input type="text" id="vp-new-option-label" placeholder="Add an option…" style="flex:1" onkeydown="if(event.key==='Enter'){addPollOption();}">
-        <button class="btn btn-ghost btn-sm" onclick="addPollOption()">+ Add</button>
+      <label class="field-label">Date</label>
+      <input type="date" id="hm-date" value="${esc(p.date || "")}" oninput="updateHostSaveButtonState()">
+    </div>
+    ${tieBreakHtml}
+    <div style="margin-bottom:16px">
+      <label class="field-label">Costs</label>
+      <div id="hm-cost-lines"></div>
+      <button class="btn btn-ghost btn-sm" onclick="addHostCostLine()" style="margin-top:6px">+ Add cost</button>
+    </div>
+    <div style="margin-bottom:16px;position:relative">
+      <label class="field-label">No-show</label>
+      <div class="ns-trigger" id="hm-noshow-trigger" onclick="toggleNoShowPanel()">
+        <div class="ns-chips" id="hm-noshow-chips">${noShowChipsHtml || '<span class="ns-trigger-placeholder">Select no-show members</span>'}</div>
+        <span class="ns-trigger-chev">▾</span>
+      </div>
+      <div class="ns-panel" id="hm-noshow-panel">
+        <div class="ns-search-wrap">
+          <input type="text" id="hm-noshow-search" placeholder="Search member" oninput="filterNoShowRows(this.value)" autocomplete="off">
+          <a class="ns-clear-all" onclick="clearAllNoShow('${pid}')">Clear all</a>
+        </div>
+        <div class="ns-list" id="hm-noshow-list">${noShowRowsHtml}</div>
       </div>
     </div>
-    <div style="display:flex;justify-content:flex-end;gap:14px;padding-top:14px;border-top:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;padding-top:14px;border-top:1px solid var(--border)">
       <button class="btn btn-ghost" onclick="togglePollStatus('${pid}')">${p.status === "open" ? "Close vote" : "Reopen vote"}</button>
-      <button class="btn btn-primary" style="background:var(--blue);border-color:var(--blue)" onclick="saveHostPollEdits('${pid}')">Save changes</button>
+      <div style="display:flex;gap:14px">
+        <button class="btn btn-ghost" onclick="cancelHostManageEdits('${pid}')">Cancel</button>
+        <button class="btn btn-primary" id="hm-update-btn" disabled style="background:var(--blue);border-color:var(--blue)" onclick="saveHostPollEdits('${pid}')">Update</button>
+      </div>
     </div>
     <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-      <label class="field-label">Voting link (share with your group)</label>
+      <label class="field-label">Voting link</label>
       <div style="display:flex;gap:6px">
         <input type="text" readonly value="${esc(pollLink(pid))}" style="flex:1;font-size:12px" onclick="this.select()">
         <button class="btn btn-ghost btn-sm" onclick="copyPollLink('${pid}')">Copy</button>
       </div>
     </div>
+    </div>
   `;
-  renderPollOptionsEditor();
+  renderHostCostLines();
+  // The Firebase listener re-renders this whole form whenever the poll
+  // changes on the server (e.g. someone votes) — that would otherwise
+  // visibly close the panel and clear the search box mid-edit, so restore
+  // that state here.
+  if (noShowPanelWasOpen) {
+    const trigger = document.getElementById("hm-noshow-trigger");
+    const panel = document.getElementById("hm-noshow-panel");
+    const search = document.getElementById("hm-noshow-search");
+    if (trigger && panel) {
+      trigger.classList.add("open");
+      panel.classList.add("open");
+    }
+    if (search && noShowSearchQuery) {
+      search.value = noShowSearchQuery;
+      filterNoShowRows(noShowSearchQuery);
+    }
+  }
+  ensureNoShowOutsideClickHandler();
+  // Baseline = the state right after loading from the server — "Update"
+  // stays disabled until something actually differs from this.
+  hostManageBaselineSnapshot = computeHostFormSnapshot();
+  updateHostSaveButtonState();
+}
+// Discards every pending edit (title/date fields, cost lines, no-show
+// selections, cost-basis pick) by simply re-rendering straight from the
+// last known server state — nothing was written to Firebase yet, so
+// there's nothing to undo server-side, just the in-progress form state.
+function cancelHostManageEdits(pid) {
+  const p = pollsCache[pid];
+  if (!p) return;
+  renderHostManageForm(pid, p);
+}
+let noShowOutsideClickAttached = false;
+let noShowPanelWasOpen = false;
+let noShowSearchQuery = "";
+function ensureNoShowOutsideClickHandler() {
+  if (noShowOutsideClickAttached) return;
+  noShowOutsideClickAttached = true;
+  document.addEventListener("click", closeNoShowPanelOnOutsideClick);
+}
+function noShowRowHtml(pid, a, checked) {
+  const tone = avatarToneFor(a);
+  const avatarHtml = a.avatar
+    ? `<img src="${a.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    : esc(initials(a.name));
+  return `<label class="ns-row" data-name="${esc(a.name.toLowerCase())}" data-namekey="${a.nameKey}">
+    <input type="checkbox" ${checked ? "checked" : ""} onchange="onNoShowCheckboxChange('${pid}','${a.nameKey}',this)">
+    <span class="ns-row-avatar" style="background:${a.avatar ? "transparent" : tone.solid};overflow:hidden">${avatarHtml}</span>
+    <span class="ns-row-name">${esc(a.name)}</span>
+    ${a.extra > 0 ? `<span class="ns-row-extra">+${a.extra}</span>` : ""}
+  </label>`;
+}
+// Pill/tag rendering for a selected no-show member, shown inside the
+// trigger box itself (avatar + name + remove ×) instead of plain text.
+function noShowChipHtml(pid, a) {
+  const tone = avatarToneFor(a);
+  const avatarHtml = a.avatar
+    ? `<img src="${a.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+    : esc(initials(a.name));
+  return `<span class="ns-chip">
+    <span class="ns-chip-avatar" style="background:${a.avatar ? "transparent" : tone.solid};overflow:hidden">${avatarHtml}</span>
+    <span class="ns-chip-name">${esc(a.name)}</span>
+    <span class="ns-chip-remove" onclick="event.stopPropagation();removeNoShowChip('${pid}','${a.nameKey}')">×</span>
+  </span>`;
+}
+function toggleNoShowPanel() {
+  const trigger = document.getElementById("hm-noshow-trigger");
+  const panel = document.getElementById("hm-noshow-panel");
+  if (!trigger || !panel) return;
+  const opening = !panel.classList.contains("open");
+  panel.classList.toggle("open", opening);
+  trigger.classList.toggle("open", opening);
+  noShowPanelWasOpen = opening;
+  if (opening) {
+    const search = document.getElementById("hm-noshow-search");
+    if (search) setTimeout(() => search.focus(), 0);
+  } else {
+    noShowSearchQuery = "";
+  }
+}
+function closeNoShowPanelOnOutsideClick(e) {
+  const trigger = document.getElementById("hm-noshow-trigger");
+  const panel = document.getElementById("hm-noshow-panel");
+  if (!trigger || !panel) {
+    document.removeEventListener("click", closeNoShowPanelOnOutsideClick);
+    noShowOutsideClickAttached = false;
+    return;
+  }
+  if (trigger.contains(e.target) || panel.contains(e.target)) return;
+  panel.classList.remove("open");
+  trigger.classList.remove("open");
+  noShowPanelWasOpen = false;
+  noShowSearchQuery = "";
+}
+function filterNoShowRows(query) {
+  noShowSearchQuery = query;
+  const q = query.trim().toLowerCase();
+  const rows = document.querySelectorAll("#hm-noshow-list .ns-row");
+  let visible = 0;
+  rows.forEach((row) => {
+    const match = !q || (row.dataset.name || "").includes(q);
+    row.style.display = match ? "" : "none";
+    if (match) visible++;
+  });
+  const list = document.getElementById("hm-noshow-list");
+  let empty = list.querySelector(".ns-empty-filtered");
+  if (visible === 0) {
+    if (!empty) {
+      empty = document.createElement("div");
+      empty.className = "ns-empty ns-empty-filtered";
+      empty.textContent = "No members found.";
+      list.appendChild(empty);
+    }
+  } else if (empty) {
+    empty.remove();
+  }
+}
+function refreshNoShowChips(pid) {
+  const p = pollsCache[pid];
+  const chipsWrap = document.getElementById("hm-noshow-chips");
+  if (!chipsWrap) return;
+  const attendanceOptions = p
+    ? computeOptionAttendance(p).filter((o) => o.total > 0)
+    : [];
+  const byKey = new Map();
+  attendanceOptions.forEach((o) =>
+    o.attendees.forEach((a) => {
+      if (!byKey.has(a.nameKey)) byKey.set(a.nameKey, a);
+    }),
+  );
+  const checkedKeys = [];
+  document
+    .querySelectorAll("#hm-noshow-list .ns-row")
+    .forEach((row) => {
+      const cb = row.querySelector('input[type="checkbox"]');
+      if (cb && cb.checked && row.dataset.namekey)
+        checkedKeys.push(row.dataset.namekey);
+    });
+  const chipsHtml = checkedKeys
+    .map((k) => byKey.get(k))
+    .filter(Boolean)
+    .map((a) => noShowChipHtml(pid, a))
+    .join("");
+  chipsWrap.innerHTML =
+    chipsHtml ||
+    '<span class="ns-trigger-placeholder">Select no-show members</span>';
+}
+// Removing a member via their chip's × — uncheck the matching row (if the
+// panel happens to be open) and drop them from the pending edit; nothing
+// hits Firebase until "Update" is pressed.
+// "Clear all" — wipes every pending no-show selection at once (still just
+// the staged tempNoShows, not written to Firebase until "Update").
+function clearAllNoShow(pid) {
+  tempNoShows = {};
+  document
+    .querySelectorAll("#hm-noshow-list .ns-row input[type=\"checkbox\"]")
+    .forEach((cb) => {
+      cb.checked = false;
+    });
+  refreshNoShowChips(pid);
+  updateHostSaveButtonState();
+}
+function removeNoShowChip(pid, nameKey) {
+  delete tempNoShows[nameKey];
+  const row = document.querySelector(
+    `#hm-noshow-list .ns-row[data-namekey="${nameKey}"]`,
+  );
+  if (row) {
+    const cb = row.querySelector('input[type="checkbox"]');
+    if (cb) cb.checked = false;
+  }
+  refreshNoShowChips(pid);
+  updateHostSaveButtonState();
+}
+// Checking a name in the No-show list. If that person picked a "+N" guest
+// option, we don't know whether they alone are missing or their guests too —
+// so we confirm the exact headcount (bounded to [1, N]) before saving. This
+// only updates the pending tempNoShows object — like the cost lines, it's
+// not written to Firebase until "Update" is pressed (and is discarded by
+// "Cancel").
+async function onNoShowCheckboxChange(pid, nameKey, checkboxEl) {
+  const p = pollsCache[pid];
+  if (!p) return;
+  if (!checkboxEl.checked) {
+    delete tempNoShows[nameKey];
+    refreshNoShowChips(pid);
+    updateHostSaveButtonState();
+    return;
+  }
+  const attendanceOptions = computeOptionAttendance(p).filter(
+    (o) => o.total > 0,
+  );
+  let attendee = null;
+  for (const o of attendanceOptions) {
+    attendee = o.attendees.find((a) => a.nameKey === nameKey);
+    if (attendee) break;
+  }
+  if (!attendee) return;
+  let count = 1;
+  if (attendee.extra > 0) {
+    count = await showNoShowCountConfirm(attendee.name, attendee.extra);
+    if (count == null) {
+      checkboxEl.checked = false; // cancelled — revert the check
+      return;
+    }
+  }
+  tempNoShows[attendee.nameKey] = count;
+  refreshNoShowChips(pid);
+  updateHostSaveButtonState();
+}
+// Small stepper confirm dialog — "N thành viên không đi hả", bounded to
+// [1, maxCount] and never negative. Resolves to the confirmed count, or
+// null if the host cancels.
+function showNoShowCountConfirm(name, maxCount) {
+  return new Promise((resolve) => {
+    let count = maxCount;
+    const backdrop = document.createElement("div");
+    backdrop.className = "confirm-backdrop";
+    backdrop.innerHTML = `
+      <div class="confirm-box">
+        <div class="confirm-hd">
+          <div class="confirm-icon-wrap info"><div class="diamond"></div><div class="mark">?</div></div>
+          <div class="confirm-title">${esc(name)}</div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin:6px 0 14px">
+          <button type="button" class="ns-dec" style="width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:18px;line-height:1;cursor:pointer">−</button>
+          <div id="ns-count-num" style="font-size:32px;font-weight:800;min-width:44px;text-align:center">${count}</div>
+          <button type="button" class="ns-inc" style="width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:18px;line-height:1;cursor:pointer">+</button>
+        </div>
+        <div class="confirm-msg" id="ns-caption" style="text-align:center">${count} thành viên không đi hả</div>
+        <div class="confirm-actions">
+          <button class="confirm-btn confirm-btn-no" type="button">Cancel</button>
+          <button class="confirm-btn confirm-btn-yes" type="button" style="background:var(--blue)">Confirm</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const numEl = backdrop.querySelector("#ns-count-num");
+    const capEl = backdrop.querySelector("#ns-caption");
+    const update = () => {
+      numEl.textContent = count;
+      capEl.textContent = `${count} thành viên không đi hả`;
+    };
+    backdrop.querySelector(".ns-dec").addEventListener("click", () => {
+      if (count > 1) {
+        count--;
+        update();
+      }
+    });
+    backdrop.querySelector(".ns-inc").addEventListener("click", () => {
+      if (count < maxCount) {
+        count++;
+        update();
+      }
+    });
+    let done = false;
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      backdrop.remove();
+      resolve(val);
+    };
+    backdrop
+      .querySelector(".confirm-btn-no")
+      .addEventListener("click", () => finish(null));
+    backdrop
+      .querySelector(".confirm-btn-yes")
+      .addEventListener("click", () => finish(count));
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) finish(null);
+    });
+  });
+}
+
+function renderHostCostLines() {
+  const wrap = document.getElementById("hm-cost-lines");
+  if (!wrap) return;
+  if (tempHostCosts.length === 0) {
+    wrap.innerHTML =
+      '<div style="font-size:12px;color:var(--hint);margin-bottom:8px">No cost items yet.</div>';
+    return;
+  }
+  wrap.innerHTML = tempHostCosts
+    .map((c) => {
+      const shortVal = c.amount > 0 ? Math.round(c.amount).toLocaleString("en-US") : "";
+      const isCourt = isCourtFeeCost(c.name);
+      return `<div class="cost-line" data-cid="${c.id}">
+      <input class="cost-name-inp" type="text" placeholder="Cost name…" value="${esc(c.name)}"
+        style="flex:1;min-width:0${isCourt ? ";background:var(--surface-2, #f3f4f6);color:var(--muted);cursor:not-allowed" : ""}"
+        ${isCourt ? "disabled" : `oninput="updateHostCostField('${c.id}','name',this.value)"`} maxlength="30">
+      <div style="text-align:right;flex-shrink:0;margin-left:10px">
+        <div class="cost-input-wrap">
+          <input type="text" inputmode="numeric" class="cost-k" placeholder="0" value="${shortVal}"
+            style="text-align:right;width:110px"
+            onblur="syncHostCostAmount('${c.id}',this)"
+            onkeydown="if(event.key==='Enter'){syncHostCostAmount('${c.id}',this)}"
+            oninput="syncHostCostAmount('${c.id}',this)">
+        </div>
+      </div>
+      <button class="hm-cost-remove" type="button" onclick="removeHostCostLine('${c.id}')" title="Remove" aria-label="Remove">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>`;
+    })
+    .join("");
+}
+function updateHostCostField(cid, field, value) {
+  const c = tempHostCosts.find((x) => x.id === cid);
+  if (c) c[field] = value;
+  updateHostSaveButtonState();
+}
+function syncHostCostAmount(cid, el) {
+  const digits = el.value.replace(/[^\d]/g, "");
+  const v = digits ? parseInt(digits, 10) : 0;
+  // Reformat with thousand separators as you type, keeping the cursor at
+  // the end (money is typed left-to-right, so this doesn't fight the user).
+  el.value = v > 0 ? v.toLocaleString("en-US") : "";
+  const c = tempHostCosts.find((x) => x.id === cid);
+  if (c) c.amount = v;
+  updateHostSaveButtonState();
+}
+function addHostCostLine() {
+  tempHostCosts.push({ id: uid(), name: "", emoji: "🗒️", amount: 0, qty: "" });
+  renderHostCostLines();
+  updateHostSaveButtonState();
+  setTimeout(() => {
+    const inputs = document.querySelectorAll("#hm-cost-lines .cost-name-inp");
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }, 50);
+}
+function removeHostCostLine(cid) {
+  tempHostCosts = tempHostCosts.filter((c) => c.id !== cid);
+  renderHostCostLines();
+  updateHostSaveButtonState();
 }
 function saveHostPollEdits(pid) {
   const title = (document.getElementById("hm-title").value || "").trim();
@@ -3164,19 +3783,22 @@ function saveHostPollEdits(pid) {
     showToast("Please pick a date");
     return;
   }
-  const options = tempPollOptions
-    .map((o) => ({ id: o.id, label: o.label.trim() }))
-    .filter((o) => o.label);
-  if (options.length === 0) {
-    showToast("Add at least 1 vote option");
-    return;
-  }
+  const btn = document.getElementById("hm-update-btn");
+  if (btn) btn.disabled = true; // instant feedback; the listener re-render confirms it
+  const costs = tempHostCosts.filter((c) => c.name || c.amount > 0);
   fdb
     .ref(POLLS_ROOT + "/" + pid)
-    .update({ note: title, date, options })
-    .then(() => showToast("Saved ✏️"))
+    .update({
+      note: title,
+      date,
+      costs,
+      noShows: Object.keys(tempNoShows).length ? tempNoShows : null,
+      costBasisOptionId: tempCostBasisOptionId || null,
+    })
+    .then(() => showToast("Updated"))
     .catch((err) => {
       console.error(err);
+      if (btn) btn.disabled = false; // save failed — let them retry
       showToast(
         "Error: " + (err && err.message ? err.message : "couldn't connect"),
       );
@@ -3374,49 +3996,49 @@ async function attachVoterLatestListener(attempt) {
   ref.on(
     "value",
     (snap) => {
-        const all = snap.val() || {};
-        let best = null,
-          bestId = null,
-          any = null,
-          anyId = null;
-        Object.keys(all).forEach((id) => {
-          const p = all[id];
-          if (!any || (p.createdAt || 0) > (any.createdAt || 0)) {
-            any = p;
-            anyId = id;
-          }
-          if (
-            p.status === "open" &&
-            (!best || (p.createdAt || 0) > (best.createdAt || 0))
-          ) {
-            best = p;
-            bestId = id;
-          }
-        });
-        voterPid = bestId || anyId;
-        voterPoll = best || any;
-        if (!voterPid) {
-          document.getElementById("vv-body").innerHTML =
-            '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No votes yet. Check back later 🏸</div>';
-          return;
+      const all = snap.val() || {};
+      let best = null,
+        bestId = null,
+        any = null,
+        anyId = null;
+      Object.keys(all).forEach((id) => {
+        const p = all[id];
+        if (!any || (p.createdAt || 0) > (any.createdAt || 0)) {
+          any = p;
+          anyId = id;
         }
-        migrateLegacyVote(voterPid, voterPoll);
-        renderVoterView();
-      },
-      (err) => {
-        console.error(err);
-        ref.off();
-        if (attempt < 3) {
-          setTimeout(
-            () => attachVoterLatestListener(attempt + 1),
-            (attempt + 1) * 1500,
-          );
-          return;
+        if (
+          p.status === "open" &&
+          (!best || (p.createdAt || 0) > (best.createdAt || 0))
+        ) {
+          best = p;
+          bestId = id;
         }
-        body.innerHTML =
-          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.<br><br><button class="vv-vote-btn" style="max-width:200px;margin:0 auto" onclick="attachVoterLatestListener(0)">🔄 Try again</button></div>';
-      },
-    );
+      });
+      voterPid = bestId || anyId;
+      voterPoll = best || any;
+      if (!voterPid) {
+        document.getElementById("vv-body").innerHTML =
+          '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">No votes yet. Check back later 🏸</div>';
+        return;
+      }
+      migrateLegacyVote(voterPid, voterPoll);
+      renderVoterView();
+    },
+    (err) => {
+      console.error(err);
+      ref.off();
+      if (attempt < 3) {
+        setTimeout(
+          () => attachVoterLatestListener(attempt + 1),
+          (attempt + 1) * 1500,
+        );
+        return;
+      }
+      body.innerHTML =
+        '<div style="text-align:center;font-size:13px;color:var(--muted);padding:10px 0">Couldn\'t load vote data. Please try again later.<br><br><button class="vv-vote-btn" style="max-width:200px;margin:0 auto" onclick="attachVoterLatestListener(0)">🔄 Try again</button></div>';
+    },
+  );
 }
 
 // ─── ADMIN CODE RATE-LIMITING / LOCKOUT (per IP, shared via Firebase) ─────
@@ -3717,6 +4339,78 @@ function renderPollInfoTab(p) {
     </div>`;
   }
 
+  // Cost summary: total + per-person, with a link that jumps to the Payment tab.
+  const sc = p.sessionCost || computeSelfServeCost(p);
+  if (sc && !sc.needsTieBreak) {
+    // If there's at least one no-show, "per player" shows the LOWEST amount
+    // among members who aren't no-show (they carry the reduced share of
+    // non-court costs) instead of a flat average — closer to what most
+    // paying members will actually owe. No no-shows → unchanged average
+    // divided by the weighted headcount (includes "+N" guests folded into a
+    // voter's own weight), same denominator the Payment tab's Costs section
+    // uses — not the number of distinctly-named attendees, which undercounts
+    // when guests are involved.
+    const nonNoShowAmounts = (sc.members || [])
+      .filter((m) => !m.noShow)
+      .map((m) => m.amount);
+    let perPersonAmt;
+    if (nonNoShowAmounts.length < (sc.members || []).length && nonNoShowAmounts.length > 0) {
+      perPersonAmt = Math.min(...nonNoShowAmounts);
+    } else {
+      const memberCount =
+        typeof sc.splitCount === "number" && sc.splitCount > 0
+          ? sc.splitCount
+          : (sc.members || []).length;
+      perPersonAmt = memberCount > 0 ? sc.total / memberCount : 0;
+    }
+    // No-show members only ever pay the court-fee share of their own
+    // weight — so "per no-show" should be a single (weight=1) person's
+    // share of just the court fee. It must NOT be derived from whichever
+    // no-show member's own total happens to be lowest: someone who
+    // brought several guests (all marked no-show) still carries their
+    // full group weight in the court-fee split, so their own total can
+    // look larger than "per player" even though they're paying for
+    // court only, same as everyone else who's no-show. Using the
+    // constant per-weight-unit court rate instead keeps this figure
+    // always ≤ per player, as it should be.
+    const hasNoShow = (sc.members || []).some((m) => m.noShow);
+    let noShowAmt = null;
+    if (hasNoShow) {
+      const courtFeeTotal = (sc.costs || [])
+        .filter((c) => isCourtFeeCost(c.name))
+        .reduce((s, c) => s + (c.amount || 0), 0);
+      const totalWeight = sc.splitCount || 0;
+      noShowAmt =
+        totalWeight > 0
+          ? Math.ceil(courtFeeTotal / totalWeight / 1000) * 1000
+          : 0;
+    }
+    // Snapshot the data the copy button needs (avoids threading long,
+    // unicode-heavy name strings through an inline onclick attribute).
+    lastInfoCostSummary = {
+      total: sc.total,
+      perPerson: perPersonAmt,
+      noShowAmt,
+      noShowMembers: (sc.members || [])
+        .filter((m) => m.noShow)
+        .map((m) => ({
+          name: m.name,
+          extra: m.extra || 0,
+          noShowCount: m.noShowCount || 0,
+        })),
+    };
+    html += `<div class="info-row">
+      <div class="info-ico">${ICON_TAG}</div>
+      <div class="info-main">
+        <div class="info-title">${fmt(sc.total)} ${t("totalCostLabel")}</div>
+        <div class="info-title">${fmt(perPersonAmt)} ${t("perPersonCostLabel")}</div>
+        ${noShowAmt !== null ? `<div class="info-title">${fmt(noShowAmt)} ${t("perNoShowCostLabel")}</div>` : ""}
+        <a class="info-link" onclick="switchVvTab('payment')">${t("goToPayment")}</a>
+      </div>
+      <button class="info-copy-btn" onclick="copyCostSummary(this)" title="Copy"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+    </div>`;
+  }
+
   return html;
 }
 
@@ -3984,20 +4678,244 @@ function renderParticipantsTab(p, groups) {
 // linked to this poll (see linkPollToSession / createSessionFromPoll).
 // Voters can see totals and who's paid, but can't toggle anything here —
 // that stays an admin-only action inside the session detail modal.
+// ─── SELF-SERVE PAYMENT CALCULATION ────────────────────────────────
+// Admin-created sessions get their cost breakdown pushed to
+// polls/{pid}/sessionCost by syncSessionCostToPoll() (see above). Self-serve
+// votes have no admin session behind them, so instead we compute an
+// equivalent breakdown live, straight from the poll's own `costs` (set by
+// the host on the Manage page) and its live votes — no separate snapshot
+// needed since everyone already reads the same poll node from Firebase.
+//
+// How many people the cost gets split among: the poll may have several
+// "main" (non-"+N") options — e.g. different candidate days, "T2 14/07" vs
+// "T3 15/07" — each with its own attendee count (direct picks + attributed
+// "+N" guests, exactly like the Participants tab's "· 5" totals). We split
+// the cost across whichever main option has the MOST people, on the
+// assumption that's the day the session actually happens. The default
+// "Can't make it" option (id "out") is never a candidate, since it counts
+// declines, not attendance.
+// If two (or more) main options are tied for the highest count, we can't
+// guess which day is real — the host must pick one explicitly from the
+// Manage page (stored as poll.costBasisOptionId); until they do, the
+// Payment tab shows a "waiting on host" message instead of a number.
+const GUEST_OPTION_RE = /^\+(\d+)(?:\s+(.+))?$/;
+function isGuestOptionLabel(label) {
+  return GUEST_OPTION_RE.test((label || "").trim());
+}
+// For every "main" (non-"+N", non-"Can't make it") option, work out its
+// attendee list and total headcount — same math renderParticipantsTab uses
+// to show "T2 14/07 · 5", just returned as data instead of markup.
+function computeOptionAttendance(poll) {
+  const groups = pollVotesByOption(poll);
+  const allVotes = Array.from(new Set(groups.flatMap((g) => g.votes)));
+  const mainGroups = groups.filter(
+    (g) => g.id !== "out" && !isGuestOptionLabel(g.label),
+  );
+  const guestGroups = groups.filter((g) => isGuestOptionLabel(g.label));
+
+  const guestMeta = {};
+  guestGroups.forEach((g) => {
+    const m = GUEST_OPTION_RE.exec(g.label.trim());
+    const amount = parseInt(m[1], 10) || 0;
+    const suffix = (m[2] || "").trim().toLowerCase();
+    let mainId = null;
+    if (suffix) {
+      const match = mainGroups.find((mg) =>
+        mg.label.toLowerCase().includes(suffix),
+      );
+      if (match) mainId = match.id;
+    }
+    if (!mainId && mainGroups.length) mainId = mainGroups[0].id;
+    guestMeta[g.id] = { amount, mainId };
+  });
+  const guestExtraForMain = (v, mainId) => {
+    let extra = 0;
+    voteChoices(v).forEach((oid) => {
+      const meta = guestMeta[oid];
+      if (meta && meta.mainId === mainId) extra += meta.amount;
+    });
+    return extra;
+  };
+
+  return mainGroups.map((g) => {
+    const directSet = new Set(g.votes);
+    const implicit = allVotes.filter(
+      (v) => !directSet.has(v) && guestExtraForMain(v, g.id) > 0,
+    );
+    const byName = new Map();
+    g.votes.concat(implicit).forEach((v) => {
+      const isDirect = directSet.has(v);
+      const extra = guestExtraForMain(v, g.id);
+      const key = nameKey(v.name);
+      const entry = byName.get(key);
+      if (!entry)
+        byName.set(key, { name: v.name, avatar: v.avatar, isDirect, extra });
+      else {
+        entry.isDirect = entry.isDirect || isDirect;
+        entry.extra += extra;
+        if (!entry.avatar && v.avatar) entry.avatar = v.avatar;
+        if (isDirect) entry.name = v.name;
+      }
+    });
+    const attendees = Array.from(byName.values())
+      .map((e) => ({
+        name: e.name,
+        nameKey: nameKey(e.name),
+        avatar: e.avatar || null,
+        weight: (e.isDirect ? 1 : 0) + e.extra,
+        extra: e.extra,
+      }))
+      .filter((a) => a.weight > 0);
+    return {
+      id: g.id,
+      label: g.label,
+      total: attendees.reduce((s, a) => s + a.weight, 0),
+      attendees,
+    };
+  });
+}
+// Picks which main option the cost should be split against: the one with
+// the highest attendee count, or the host's explicit tie-break choice when
+// several options are tied for the top spot. Returns null if there's
+// nothing to split yet, or a tie the host hasn't resolved.
+function pickCostBasisOption(poll) {
+  const options = computeOptionAttendance(poll);
+  const withVoters = options.filter((o) => o.total > 0);
+  if (withVoters.length === 0) return null;
+  const maxTotal = Math.max(...withVoters.map((o) => o.total));
+  const tied = withVoters.filter((o) => o.total === maxTotal);
+  if (tied.length === 1) return tied[0];
+  return tied.find((o) => o.id === poll.costBasisOptionId) || null;
+}
+// Identifies which cost line is "the court fee" (tiền sân) — the only cost
+// a no-show member still owes. Matched by name since hosts can freely rename
+// or add cost lines; "Court Fee" is just the default preset label.
+function isCourtFeeCost(name) {
+  return /court|s[aâ]n/i.test((name || "").trim());
+}
+function computeSelfServeCost(poll) {
+  const costs = (poll.costs || []).filter((c) => c.name || c.amount > 0);
+  if (costs.length === 0) return null;
+  const basis = pickCostBasisOption(poll);
+  if (!basis) {
+    const options = computeOptionAttendance(poll).filter((o) => o.total > 0);
+    const maxTotal = options.length
+      ? Math.max(...options.map((o) => o.total))
+      : 0;
+    const tied = options.filter((o) => o.total === maxTotal);
+    return {
+      selfServe: true,
+      needsTieBreak: tied.length > 1,
+      tiedOptions: tied,
+    };
+  }
+  const attendees = basis.attendees;
+  const totalWeight = basis.total;
+  const noShows = poll.noShows || {};
+  // No-show members keep their full weight for the court fee, but are
+  // excluded (fully or partially, per the confirmed no-show count) from
+  // every other cost line.
+  const otherWeight = (a) => Math.max(0, a.weight - (noShows[a.nameKey] || 0));
+  const otherTotalWeight = attendees.reduce((s, a) => s + otherWeight(a), 0);
+  const total = costs.reduce((s, c) => s + (c.amount || 0), 0);
+  // Court fee: everyone keeps full weight (self + all guests), so "+N" reflects
+  // every extra person they brought.
+  const names = attendees.map((a) =>
+    a.extra > 0 ? `${a.name} +${a.extra}` : a.name,
+  );
+  // Other costs: no-shows drop out, so a member's remaining guests are their
+  // weight minus their own seat (otherWeight - 1) after subtracting no-shows.
+  const otherNames = attendees
+    .filter((a) => otherWeight(a) > 0)
+    .map((a) => {
+      const g = otherWeight(a) - 1;
+      return g > 0 ? `${a.name} +${g}` : a.name;
+    });
+  const costLines = costs.map((c) => {
+    const isCourt = isCourtFeeCost(c.name);
+    const lineNames = isCourt ? names : otherNames;
+    // Split by weighted headcount (guests included) so /person matches what
+    // each member actually owes, instead of dividing by voter count.
+    const denom = isCourt ? totalWeight : otherTotalWeight;
+    return {
+      name: c.name || "Cost",
+      emoji: c.emoji || "🗒️",
+      amount: c.amount || 0,
+      perPerson: denom > 0 ? (c.amount || 0) / denom : 0,
+      names: lineNames,
+    };
+  });
+  const paidMap = poll.costsPaid || {};
+  const members = attendees.map((a) => {
+    let amount = 0;
+    costs.forEach((c) => {
+      if (isCourtFeeCost(c.name)) {
+        amount += totalWeight > 0 ? ((c.amount || 0) * a.weight) / totalWeight : 0;
+      } else {
+        const w = otherWeight(a);
+        if (w > 0 && otherTotalWeight > 0) {
+          amount += ((c.amount || 0) * w) / otherTotalWeight;
+        }
+      }
+    });
+    return {
+      name: a.name,
+      nameKey: a.nameKey,
+      amount: Math.ceil(amount / 1000) * 1000,
+      paid: !!paidMap[a.nameKey],
+      noShow: !!noShows[a.nameKey],
+      extra: a.extra || 0,
+      noShowCount: noShows[a.nameKey] || 0,
+    };
+  });
+  const collected = members
+    .filter((m) => m.paid)
+    .reduce((s, m) => s + m.amount, 0);
+  return {
+    selfServe: true,
+    basisLabel: basis.label,
+    splitCount: totalWeight,
+    date: poll.date,
+    note: poll.note,
+    total,
+    collected,
+    pending: total - collected,
+    costs: costLines,
+    members,
+  };
+}
+
+// Toggle a self-serve attendee's paid status (anyone with the vote link can
+// mark themselves — or a teammate — as paid, since there's no admin behind
+// a self-serve vote to do it for them). Stored on the poll itself, keyed by
+// nameKey so it survives across devices/renames the same way votes do.
+function toggleSelfServePaid(pid, memberNameKey) {
+  if (!fbReady()) return;
+  const ref = fdb.ref(POLLS_ROOT + "/" + pid + "/costsPaid/" + memberNameKey);
+  ref.once("value").then((snap) => {
+    ref.set(!snap.val());
+  });
+}
+
 function renderPaymentTab(p) {
-  const sc = p.sessionCost;
+  const sc = p.sessionCost || computeSelfServeCost(p);
+
   if (!sc) {
     return `<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 10px;line-height:1.6">
       <br>
       ${t("paymentPending")}
     </div>`;
   }
-  const pct = sc.total > 0 ? Math.round((sc.collected / sc.total) * 100) : 0;
+  if (sc.needsTieBreak) {
+    return `<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px 10px;line-height:1.6">
+      <br>
+      ⚖️ ${sc.tiedOptions.map((o) => esc(o.label)).join(" and ")} are tied with the same number of people.<br>The host needs to pick which one to base the cost split on (from the Manage page) before this can be calculated.
+    </div>`;
+  }
   const costLines = (sc.costs || [])
     .map(
       (c) => `
     <div class="cost-line">
-      <span class="cost-line-emoji">${c.emoji || "🗒️"}</span>
       <div style="flex:1">
         <div class="cost-line-name">${esc(c.name || t("costItem"))}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${c.names && c.names.length ? c.names.map(esc).join(", ") : t("unassigned")} · ${fmt(c.perPerson)}${t("perPerson")}</div>
@@ -4007,22 +4925,34 @@ function renderPaymentTab(p) {
     )
     .join("");
   const memberLines = (sc.members || [])
-    .map(
-      (m) => `
-    <div class="player-item" style="margin-bottom:6px">
+    .map((m) => {
+      const clickable = sc.selfServe
+        ? `onclick="toggleSelfServePaid('${voterPid}','${m.nameKey}')" style="cursor:pointer"`
+        : "";
+      let suffix = "";
+      if (m.extra > 0) {
+        suffix = ` <span style="font-weight:400;color:var(--muted)">(${m.extra})</span>`;
+        if (m.noShowCount > 0) {
+          suffix += ` <span style="font-size:10px;color:var(--hint);font-weight:400">- (${m.noShowCount} no show)</span>`;
+        }
+      } else if (m.noShow) {
+        suffix = ` <span style="font-size:10px;color:var(--hint);font-weight:400">(no-show)</span>`;
+      }
+      return `
+    <div class="player-item" style="margin-bottom:6px" ${clickable}>
       <div class="avatar ${m.paid ? "av-paid" : ""}">${initials(m.name)}</div>
       <div style="flex:1">
-        <div class="pi-name">${esc(m.name)}</div>
+        <div class="pi-name">${esc(m.name)}${suffix}</div>
         <div class="pi-detail ${m.paid ? "paid-detail" : ""}">${m.paid ? t("paidStatus") : t("owes") + " " + fmt(m.amount)}</div>
       </div>
       <span class="badge-pill ${m.paid ? "badge-green" : "badge-coral"}">${m.paid ? t("paidBadge") : t("notPaidBadge")}</span>
-    </div>`,
-    )
+    </div>`;
+    })
     .join("");
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div>
-        <div style="font-size:11px;color:var(--muted)">📅 ${esc(fmtDate(sc.date))}${sc.note ? " · " + esc(sc.note) : ""}</div>
+        <div style="font-size:11px;color:var(--muted)">${esc(fmtDate(sc.date))}${sc.note ? " · " + esc(sc.note) : ""}</div>
         <div style="font-size:20px;font-weight:700;letter-spacing:-.02em;margin-top:2px">${fmt(sc.total)}</div>
       </div>
       <div style="text-align:right">
@@ -4030,9 +4960,7 @@ function renderPaymentTab(p) {
         <div style="font-size:16px;font-weight:600;color:var(--green)">${fmt(sc.collected)}</div>
       </div>
     </div>
-    <div class="prog-label"><span>${t("progress")}</span><span>${pct}%</span></div>
-    <div class="prog-wrap"><div class="prog-bar" style="width:${pct}%"></div></div>
-    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">${t("costs")}</div>
+    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px;display:flex;align-items:center;gap:6px">${t("costs")} <span style="font-size:15px;font-weight:700;color:var(--text)">${sc.splitCount != null ? sc.splitCount : (sc.members || []).length}</span>${(() => { const ns = (sc.members || []).reduce((s, m) => s + (m.noShowCount || (m.noShow ? 1 : 0)), 0); return ns > 0 ? ` <span style="font-size:11px;font-weight:400;color:var(--hint);text-transform:none;letter-spacing:0">(${ns} no-show)</span>` : ""; })()}</div>
     ${costLines || `<div style="font-size:12px;color:var(--hint)">${t("noCosts")}</div>`}
     <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px">${t("members")}</div>
     ${memberLines || `<div style="font-size:12px;color:var(--hint)">${t("noMembers")}</div>`}
@@ -4239,7 +5167,7 @@ function addVoterOption() {
       vvPendingChoices.add(ref.key);
       vvShowAddOptionInput = false;
       renderVoterSelectModal();
-      showToast("Option added ✅");
+      showToast("Option added");
       logVoteEvent(voterPid, voterName, `added new option "${label}"`);
     })
     .catch((err) => {
@@ -4575,7 +5503,7 @@ async function onVoterAvatarSelected(inputEl) {
         avatar: dataUrl,
       });
     }
-    showToast("📸 Photo updated");
+    showToast("Photo updated");
     renderVoterView();
   } catch (err) {
     console.error(err);
@@ -4650,6 +5578,58 @@ renderSessions();
   }
   if (!isAdmin) initVoterLatest();
 })();
+
+// ——— COPY COST SUMMARY (Detail tab: Tổng / Mỗi người / Vote ko đi) ———
+// Snapshot of the most-recently-rendered cost summary row, refreshed each
+// time renderPollInfoTab runs. Kept out of the onclick attribute itself
+// since member names can contain quotes/unicode that are awkward to
+// safely inline into HTML attribute strings.
+let lastInfoCostSummary = null;
+function fmtKShort(n) {
+  return Math.round(n / 1000) + "k";
+}
+// One bullet line per no-show entry:
+//  - solo no-show (no guests)      -> "* Tên"
+//  - whole group no-show           -> "* Nhóm Tên ko đi"
+//  - partial group no-show         -> "* Tên X/Y ko đi"
+function noShowMemberLine(m) {
+  if (!m.extra) return "* " + m.name;
+  if (m.noShowCount >= m.extra) return "* Nhóm " + m.name + " ko đi";
+  return "* " + m.name + " " + m.noShowCount + "/ " + m.extra + " ko đi";
+}
+function copyCostSummary(btn) {
+  const data = lastInfoCostSummary;
+  if (!data) return;
+  const lines = [
+    "Tổng: " + fmtKShort(data.total),
+    "----------------",
+    "Mỗi người: " + fmtKShort(data.perPerson),
+  ];
+  if (data.noShowAmt !== null && data.noShowAmt !== undefined) {
+    lines.push("Vote ko đi: " + fmtKShort(data.noShowAmt));
+  }
+  if (data.noShowMembers && data.noShowMembers.length) {
+    lines.push("");
+    data.noShowMembers.forEach((m) => lines.push(noShowMemberLine(m)));
+  }
+  const text = lines.join("\n");
+  const done = function () {
+    btn.classList.add("copied");
+    setTimeout(function () {
+      btn.classList.remove("copied");
+    }, 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard
+      .writeText(text)
+      .then(done)
+      .catch(function () {
+        prompt("Copy this text:", text);
+      });
+  } else {
+    prompt("Copy this text:", text);
+  }
+}
 
 // ——— COPY STK ———
 function copySTK(btn) {
