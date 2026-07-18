@@ -170,11 +170,18 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
 /* COST ITEM */
 .cost-line{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
 .cost-line:last-child{border-bottom:none}
+.cost-line-top{align-items:flex-start}
+.cost-line-top .cost-line-emoji{margin-top:9px}
+.cost-line-top .cost-value-col{margin-top:9px}
+.cost-line-top>.btn-icon{margin-top:9px}
 .cost-line-emoji{font-size:15px;flex-shrink:0}
 .cost-line-name{flex:1;font-size:13px;font-weight:500}
 .cost-amount{font-size:13px;font-weight:600;min-width:80px;text-align:right}
 .cost-input-wrap{position:relative;width:130px}
 .cost-input-wrap input{text-align:right;padding-right:24px}
+.cost-input-wrap input[type=number]::-webkit-outer-spin-button,
+.cost-input-wrap input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cost-input-wrap input[type=number]{-moz-appearance:textfield}
 .cost-input-wrap .unit{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);pointer-events:none}
 .cost-display{font-size:11px;color:var(--hint);text-align:right;margin-top:1px}
 
