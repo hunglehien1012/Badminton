@@ -618,17 +618,28 @@ function memberWeight(session, memberId) {
   const sm = session.members.find((m) => m.id === memberId);
   return 1 + (sm && sm.guestCount ? sm.guestCount : 0);
 }
+// Weight for a specific cost line: no-show members keep their FULL weight for
+// the court fee (they already reserved the spot) but lose the no-show portion
+// of their weight on every other cost line — same rule as the public vote
+// page's self-serve calculation (see computeSelfServeCost's otherWeight).
+function memberWeightForCost(session, memberId, cost) {
+  const full = memberWeight(session, memberId);
+  if (cost && isCourtFeeCost(cost.name)) return full;
+  const sm = session.members.find((m) => m.id === memberId);
+  const noShowCount = sm && sm.noShowCount ? sm.noShowCount : 0;
+  return Math.max(0, full - noShowCount);
+}
 function calcMemberAmount(session, memberId) {
   let total = 0;
-  const myWeight = memberWeight(session, memberId);
   session.costs.forEach((c) => {
-    if (c.memberIds.includes(memberId)) {
-      const totalWeight = c.memberIds.reduce(
-        (sum, id) => sum + memberWeight(session, id),
-        0,
-      );
-      if (totalWeight > 0) total += (c.amount * myWeight) / totalWeight;
-    }
+    if (!c.memberIds.includes(memberId)) return;
+    const myWeight = memberWeightForCost(session, memberId, c);
+    if (myWeight <= 0) return;
+    const totalWeight = c.memberIds.reduce(
+      (sum, id) => sum + memberWeightForCost(session, id, c),
+      0,
+    );
+    if (totalWeight > 0) total += (c.amount * myWeight) / totalWeight;
   });
   return Math.ceil(total / 1000) * 1000;
 }
@@ -651,10 +662,11 @@ function syncSessionCostToPoll(session) {
       const g = m && m.guestCount ? m.guestCount : 0;
       return g > 0 ? `${nm} +${g}` : nm;
     });
-    // Divide by weighted headcount (each member's seat + their guests) so the
-    // /person figure matches what members actually owe.
+    // Divide by weighted headcount (each member's seat + their guests, minus
+    // any no-show weight on non-court-fee lines) so the /person figure
+    // matches what members actually owe — see memberWeightForCost.
     const lineWeight = c.memberIds.reduce(
-      (sum, id) => sum + memberWeight(session, id),
+      (sum, id) => sum + memberWeightForCost(session, id, c),
       0,
     );
     const perPerson = lineWeight > 0 ? c.amount / lineWeight : 0;
@@ -670,8 +682,11 @@ function syncSessionCostToPoll(session) {
     name: m.name,
     amount: calcMemberAmount(session, m.id),
     paid: !!m.paid,
+    extra: m.guestCount || 0,
+    noShow: !!(m.noShowCount && m.noShowCount > 0),
+    noShowCount: m.noShowCount || 0,
   }));
-  const total = membersSnap.reduce((s, m) => s + m.amount, 0);
+  const total = session.costs.reduce((s, c) => s + (c.amount || 0), 0);
   const collected = membersSnap
     .filter((m) => m.paid)
     .reduce((s, m) => s + m.amount, 0);
@@ -739,21 +754,6 @@ function buildSessionText(s) {
   const d = new Date(s.date + "T00:00:00");
   const dateBlock = `${VN_WEEKDAYS[d.getDay()]}--- ${d.getDate()}/${d.getMonth() + 1}`;
 
-  const activeMembers = s.members.filter((m) => calcMemberAmount(s, m.id) > 0);
-  const amounts = activeMembers.map((m) => calcMemberAmount(s, m.id));
-  const allEqual = amounts.length > 0 && amounts.every((a) => a === amounts[0]);
-  const memberBlock =
-    activeMembers.length === 0
-      ? ""
-      : allEqual
-        ? `Mỗi mem ${Math.round(amounts[0] / 1000)}k`
-        : activeMembers
-            .map(
-              (m) =>
-                `${m.name}: ${Math.round(calcMemberAmount(s, m.id) / 1000)}k`,
-            )
-            .join("\n");
-
   const costBlock = s.costs
     .filter((c) => c.name || c.amount > 0)
     .map((c) => {
@@ -762,11 +762,50 @@ function buildSessionText(s) {
     })
     .join("\n");
 
-  const namesBlock = activeMembers.map((m) => m.name).join(", ");
+  // Build per-member display entries
+  const activeMembers = s.members.filter((m) => calcMemberAmount(s, m.id) > 0);
+  const entries = activeMembers.map((m) => {
+    const amt = calcMemberAmount(s, m.id);
+    const weight = memberWeight(s, m.id);
+    const noShow = m.noShowCount || 0;
+    // Name with weight: "Tester(4)" if weight > 1, else just "Tester"
+    let namePart = m.name;
+    if (weight > 1) namePart += `(${weight})`;
+    // No-show annotation: "(ko đi)" if all absent, "(N ko đi)" if partial
+    let suffix = "";
+    if (noShow > 0) {
+      suffix = noShow >= weight ? " (ko đi)" : ` (${noShow} ko đi)`;
+    }
+    return { namePart, amt, suffix, hasNoShow: noShow > 0 };
+  });
 
-  return [dateBlock, memberBlock, costBlock, namesBlock]
-    .filter(Boolean)
-    .join("\n\n");
+  // Group members by amount, preserving first-appearance order.
+  // Members with no-show annotations get their own line (not grouped with
+  // clean members) so the annotation stays clear.
+  const amtOrder = []; // ordered unique amounts (first-seen)
+  const byAmt = {};    // amt -> { clean: [], annotated: [] }
+  entries.forEach((e) => {
+    if (!byAmt[e.amt]) {
+      byAmt[e.amt] = { clean: [], annotated: [] };
+      amtOrder.push(e.amt);
+    }
+    (e.hasNoShow ? byAmt[e.amt].annotated : byAmt[e.amt].clean).push(e);
+  });
+
+  const lines = [];
+  amtOrder.forEach((amt) => {
+    const amtK = Math.round(amt / 1000);
+    const { clean, annotated } = byAmt[amt];
+    if (clean.length > 0) {
+      lines.push(clean.map((e) => e.namePart).join(", ") + `: ${amtK}k`);
+    }
+    annotated.forEach((e) => {
+      lines.push(`${e.namePart}: ${amtK}k${e.suffix}`);
+    });
+  });
+
+  const memberBlock = lines.join("\n");
+  return dateBlock + "\n\n\n" + costBlock + "\n\n" + memberBlock;
 }
 
 function copySessionText(sid) {
@@ -788,14 +827,14 @@ function copySessionText(sid) {
 function renderSessions() {
   // Global stats
   let collected = 0,
-    pending = 0;
+    totalCosts = 0;
   sessions.forEach((s) => {
+    totalCosts += s.costs.reduce((sum, c) => sum + (c.amount || 0), 0);
     s.members.forEach((m) => {
-      const amt = calcMemberAmount(s, m.id);
-      if (m.paid) collected += amt;
-      else pending += amt;
+      if (m.paid) collected += calcMemberAmount(s, m.id);
     });
   });
+  const pending = totalCosts - collected;
   document.getElementById("s-total-sessions").textContent = sessions.length;
   document.getElementById("s-collected").textContent = fmtK(collected);
   document.getElementById("s-pending").textContent = fmtK(pending);
@@ -834,10 +873,10 @@ function renderSessions() {
       mPaid = 0,
       mBuoi = groupSessions.length;
     groupSessions.forEach((s) => {
+      mTotal += s.costs.reduce((sum, c) => sum + (c.amount || 0), 0);
       s.members.forEach((m) => {
         const amt = calcMemberAmount(s, m.id);
         if (amt <= 0) return;
-        mTotal += amt;
         if (m.paid) mPaid += amt;
       });
     });
@@ -868,10 +907,7 @@ function renderSessions() {
       const activeM = s.members.filter((m) => calcMemberAmount(s, m.id) > 0);
       const paidCount = activeM.filter((m) => m.paid).length;
       const total = activeM.length;
-      const totalAmt = activeM.reduce(
-        (sum, m) => sum + calcMemberAmount(s, m.id),
-        0,
-      );
+      const totalAmt = s.costs.reduce((sum, c) => sum + (c.amount || 0), 0);
       const paidAmt = activeM
         .filter((m) => m.paid)
         .reduce((sum, m) => sum + calcMemberAmount(s, m.id), 0);
@@ -937,7 +973,7 @@ function openNewSession() {
   document.getElementById("ms-address").value = "";
   document.getElementById("ms-maps-link").value = "";
   // All members included; fixed always pre-checked in costs
-  tempMembers = members.map((m) => ({ ...m, included: true, guestCount: 0 }));
+  tempMembers = members.map((m) => ({ ...m, included: true, guestCount: 0, noShowCount: 0 }));
   tempCosts = COST_PRESETS.map((p) => ({
     id: uid(),
     name: p.name,
@@ -982,6 +1018,7 @@ function openEditSession(sid) {
       name,
       included: savedIds.includes(id),
       guestCount: sm && sm.guestCount ? sm.guestCount : 0,
+      noShowCount: sm && sm.noShowCount ? sm.noShowCount : 0,
     });
   });
   renderCostLines();
@@ -1034,7 +1071,7 @@ function renderCostLines() {
         .join("");
       const dispVal = c.amount > 0 ? fmt(c.amount) : "";
       const shortVal = c.amount > 0 ? Math.round(c.amount / 1000) : "";
-      return `<div class="cost-line" data-cid="${c.id}">
+      return `<div class="cost-line cost-line-top" data-cid="${c.id}">
       <span class="cost-line-emoji">${c.emoji}</span>
       <div style="flex:1;min-width:0">
         <div style="display:flex;gap:6px;margin-bottom:6px">
@@ -1050,7 +1087,7 @@ function renderCostLines() {
         <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Apply to:</div>
         <div class="share-toggle">${allToggle}${toggles}</div>
       </div>
-      <div style="text-align:right;flex-shrink:0;margin-left:10px">
+      <div class="cost-value-col" style="text-align:right;flex-shrink:0;margin-left:10px">
         <div class="cost-input-wrap">
           <input type="number" class="cost-k" placeholder="0" value="${shortVal}" min="0" step="1"
             style="text-align:right;width:110px"
@@ -1112,6 +1149,30 @@ function changeGuestCount(mid, delta) {
   const m = tempMembers.find((x) => x.id === mid);
   if (!m) return;
   m.guestCount = Math.max(0, (m.guestCount || 0) + delta);
+  // A member's no-show count can never exceed their own weight (self + guests).
+  const weight = 1 + m.guestCount;
+  if ((m.noShowCount || 0) > weight) m.noShowCount = weight;
+  renderModalMembers();
+}
+// Small stepper for how many of this member's own weight (self + guests)
+// didn't actually show up — kept full weight for the court-fee line (they
+// already reserved the spot) but excluded from every other cost line, same
+// as the self-serve no-show handling on the public vote page. Bounded to
+// [0, 1+guestCount] since it can't exceed this member's own weight.
+function noShowStepperHtml(m) {
+  const n = m.noShowCount || 0;
+  const weight = 1 + (m.guestCount || 0);
+  return `<span style="display:inline-flex;align-items:center;gap:3px;flex-shrink:0" title="How many of this member's own weight (self + guests) were no-shows">
+    <button type="button" class="btn-icon" style="width:20px;height:20px;font-size:12px" onclick="changeNoShowCount('${m.id}',-1)">−</button>
+    <span class="badge-pill ${n > 0 ? "badge-coral" : ""}" style="min-width:26px;text-align:center;font-size:10px">🚫${n}</span>
+    <button type="button" class="btn-icon" style="width:20px;height:20px;font-size:12px" onclick="changeNoShowCount('${m.id}',1)" ${n >= weight ? "disabled" : ""}>+</button>
+  </span>`;
+}
+function changeNoShowCount(mid, delta) {
+  const m = tempMembers.find((x) => x.id === mid);
+  if (!m) return;
+  const weight = 1 + (m.guestCount || 0);
+  m.noShowCount = Math.max(0, Math.min(weight, (m.noShowCount || 0) + delta));
   renderModalMembers();
 }
 function renderModalMembers() {
@@ -1133,6 +1194,7 @@ function renderModalMembers() {
         <input type="checkbox" checked disabled style="width:auto;opacity:.5;cursor:not-allowed">
         <label style="font-size:13px;font-weight:500;flex:1;color:var(--text)">${esc(m.name)}</label>
         ${guestStepperHtml(m)}
+        ${noShowStepperHtml(m)}
         <span style="font-size:10px;color:var(--amber)">⭐</span>
       </div>`,
       )
@@ -1147,6 +1209,7 @@ function renderModalMembers() {
         <input type="checkbox" id="mm-${m.id}" ${m.included ? "checked" : ""} onchange="toggleModalMember('${m.id}',this.checked)" style="width:auto;cursor:pointer">
         <label for="mm-${m.id}" style="font-size:13px;font-weight:500;cursor:pointer;flex:1">${esc(m.name)}</label>
         ${guestStepperHtml(m)}
+        ${noShowStepperHtml(m)}
         <span style="font-size:10px;color:var(--muted)">Casual</span>
       </div>`,
       )
@@ -1177,7 +1240,7 @@ function addInlineMember() {
   const newMember = { id: uid(), name, type: "casual" };
   members.push(newMember);
   saveMembers();
-  tempMembers.push({ ...newMember, included: true, guestCount: 0 });
+  tempMembers.push({ ...newMember, included: true, guestCount: 0, noShowCount: 0 });
   inp.value = "";
   // Casual: NOT auto-added to cost lines (must be ticked manually)
   renderModalMembers();
@@ -1227,6 +1290,7 @@ function saveSession() {
           name: m.name,
           paid: existing ? existing.paid : false,
           guestCount: m.guestCount || 0,
+          noShowCount: m.noShowCount || 0,
         };
       });
       sessions[idx] = {
@@ -1253,6 +1317,7 @@ function saveSession() {
         name: m.name,
         paid: false,
         guestCount: m.guestCount || 0,
+        noShowCount: m.noShowCount || 0,
       })),
       ...(tempSessionPollLink ? { pollId: tempSessionPollLink } : {}),
     };
@@ -1450,10 +1515,7 @@ function renderDetailInfoTab(s) {
 function renderDetailVoteTab(s, sid) {
   // Only count members who have amt > 0 (i.e. are in at least one cost item)
   const activeMembers = s.members.filter((m) => calcMemberAmount(s, m.id) > 0);
-  const totalAmt = activeMembers.reduce(
-    (sum, m) => sum + calcMemberAmount(s, m.id),
-    0,
-  );
+  const totalAmt = s.costs.reduce((sum, c) => sum + (c.amount || 0), 0);
   const paidAmt = activeMembers
     .filter((m) => m.paid)
     .reduce((sum, m) => sum + calcMemberAmount(s, m.id), 0);
@@ -1550,12 +1612,10 @@ function openDetail(sid) {
   document.getElementById("md-copy-text-btn").onclick = () =>
     copySessionText(sid);
 
-  document.getElementById("md-panel-info").innerHTML = renderDetailInfoTab(s);
   document.getElementById("md-panel-vote").innerHTML = renderDetailVoteTab(
     s,
     sid,
   );
-  switchDetailTab("info");
 
   openModal("modal-detail");
 }
@@ -1939,6 +1999,12 @@ function showToast(msg) {
   el.classList.add("show");
   clearTimeout(_tt);
   _tt = setTimeout(() => el.classList.remove("show"), 2400);
+}
+function showAbsentTip(name, extra) {
+  const msg = voterLang === "vi"
+    ? `${name} vắng mặt nhưng vote dùm cho ${extra} bạn khác`
+    : `${name} is absent but voted on behalf of ${extra} other friend${extra > 1 ? "s" : ""}`;
+  showToast(msg);
 }
 
 // ─── CUSTOM CONFIRM DIALOG (thay cho confirm() mặc định của trình duyệt) ──
@@ -3029,23 +3095,46 @@ function renderPollList() {
 
 // Create a new session from vote results: everyone who voted for the "Join"
 // option (✅) is added and pre-ticked in the cost split.
-// Options labelled "+1", "+2", "+3"... mean "bringing N extra guests".
-// Returns N (0 if the label doesn't match that pattern).
-function extraGuestCount(label) {
-  const m = /^\+\s*(\d+)$/.exec((label || "").trim());
-  return m ? parseInt(m[1], 10) : 0;
-}
 
 function createSessionFromPoll(pid) {
   const p = pollsCache[pid];
   if (!p) return;
-  const ins = pollVotesFor(p, "in");
-  if (ins.length === 0) {
+  // Use the SAME attendance logic as the Payment tab (computeOptionAttendance /
+  // pickCostBasisOption) instead of hard-coding option id "in" — that only
+  // matches the default "Go"/"Bận" poll, and silently finds 0 votes on polls
+  // that use custom options (e.g. "T2 14/07", "T3 15/07"...), even though
+  // people clearly voted. Here we pick whichever option has the most voters
+  // (matching what Payment already bases the cost split on), with the same
+  // tie-break rule (host's saved costBasisOptionId) if two options are tied.
+  const attendance = computeOptionAttendance(p).filter((o) => o.total > 0);
+  if (attendance.length === 0) {
     showToast("No one has voted to join yet");
     return;
   }
-  // Match voter names to members (case/accent-insensitive); unknown names → new Casual member
+  const maxTotal = Math.max(...attendance.map((o) => o.total));
+  const tied = attendance.filter((o) => o.total === maxTotal);
+  let basis = tied.length === 1 ? tied[0] : null;
+  if (!basis && tied.length > 1) {
+    basis = tied.find((o) => o.id === p.costBasisOptionId) || null;
+  }
+  if (!basis) {
+    showToast(
+      "⚖️ " +
+        tied.map((o) => o.label).join(" and ") +
+        " are tied — resolve which one to use from the Manage page first",
+    );
+    return;
+  }
+  const ins = basis.attendees;
+  // Match voter names to members (case/accent-insensitive); unknown names → new Casual
+  // member. basis.attendees already folds in "+N" guest-option votes — including from
+  // people who only voted the guest option, not the main day option itself — via
+  // computeOptionAttendance's GUEST_OPTION_RE parsing, which (unlike extraGuestCount
+  // below) correctly handles suffixed labels like "+2 t3" used to tie a guest option to
+  // a specific day option. So we reuse its v.extra directly instead of re-deriving guest
+  // counts from scratch.
   const votedIds = new Set();
+  const guestCounts = {}; // memberId -> total extra guests for this session
   ins.forEach((v) => {
     let m = members.find((mm) => nameKey(mm.name) === nameKey(v.name));
     if (!m) {
@@ -3053,29 +3142,7 @@ function createSessionFromPoll(pid) {
       members.push(m);
     }
     votedIds.add(m.id);
-  });
-  // Members who selected a "+N" option are bringing N extra guests. Instead of
-  // creating a separate "Name +N" member, fold N into the voter's OWN member
-  // as guestCount — they stay a single avatar in the session, shown with a
-  // "+N" badge, and their cost share is weighted up accordingly (see
-  // calcMemberAmount / memberWeight) rather than splitting into extra people.
-  const pOptions = pollOptions(p);
-  const allVotes = mergedPollVotes(p);
-  const guestCounts = {}; // memberId -> total extra guests for this session
-  allVotes.forEach((v) => {
-    let extra = 0;
-    voteChoices(v).forEach((cid) => {
-      const opt = pOptions.find((o) => o.id === cid);
-      extra += opt ? extraGuestCount(opt.label) : 0;
-    });
-    if (extra <= 0) return;
-    let m = members.find((mm) => nameKey(mm.name) === nameKey(v.name));
-    if (!m) {
-      m = { id: uid(), name: v.name.trim(), type: "casual" };
-      members.push(m);
-    }
-    votedIds.add(m.id); // include them even if they didn't vote "Join" themselves
-    guestCounts[m.id] = (guestCounts[m.id] || 0) + extra;
+    guestCounts[m.id] = (guestCounts[m.id] || 0) + Math.max(0, (v.weight || 1) - 1);
   });
   saveMembers();
   editingSessionId = null;
@@ -3086,18 +3153,37 @@ function createSessionFromPoll(pid) {
   document.getElementById("ms-date").value =
     p.date || new Date().toISOString().slice(0, 10);
   document.getElementById("ms-note").value = p.note || "Saturday";
+  // Carry over the host's own no-show marks from "Manage your vote"
+  // (poll.noShows, keyed by nameKey → how many of that voter's own weight
+  // didn't show up) so the new Session starts already reflecting them,
+  // instead of silently losing that info the moment a real Session takes
+  // over the Payment tab from the self-serve calculation.
+  const pollNoShows = p.noShows || {};
   // Only pre-tick members who actually voted ✅ Join (including Fixed) plus their +N guests — no one else added automatically
-  tempMembers = members.map((m) => ({
-    ...m,
-    included: votedIds.has(m.id),
-    guestCount: guestCounts[m.id] || 0,
-  }));
-  tempCosts = COST_PRESETS.map((pr) => ({
+  tempMembers = members.map((m) => {
+    const guestCount = guestCounts[m.id] || 0;
+    const rawNoShow = pollNoShows[nameKey(m.name)] || 0;
+    return {
+      ...m,
+      included: votedIds.has(m.id),
+      guestCount,
+      // Clamped to this member's own weight (self + guests) in case it no
+      // longer matches what the poll originally recorded.
+      noShowCount: Math.min(rawNoShow, 1 + guestCount),
+    };
+  });
+  // Reuse the host's own cost amounts from "Manage your vote" (poll.costs) if
+  // they entered any, instead of always resetting to the blank template
+  // amounts — otherwise creating a Session silently discarded whatever the
+  // host had already filled in over there.
+  const pollCosts = (p.costs || []).filter((c) => c.name || c.amount > 0);
+  tempCosts = (pollCosts.length > 0 ? pollCosts : COST_PRESETS).map((pr) => ({
     id: uid(),
     name: pr.name,
-    emoji: pr.emoji,
-    amount: pr.amount * 1000,
-    qty: "",
+    emoji: pr.emoji || "🗒️",
+    // poll.costs amounts are already full VND; COST_PRESETS are in "k" (thousands).
+    amount: pollCosts.length > 0 ? pr.amount || 0 : pr.amount * 1000,
+    qty: pr.qty || "",
     memberIds: [],
   }));
   const incIds = tempMembers.filter((m) => m.included).map((m) => m.id);
@@ -3674,9 +3760,11 @@ function noShowChipHtml(pid, a) {
   const avatarHtml = a.avatar
     ? `<img src="${a.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
     : esc(initials(a.name));
+  const nsCount = tempNoShows[a.nameKey] || 0;
+  const countLabel = nsCount > 0 ? ` <span style="font-size:10px;color:var(--hint)">(${nsCount} no-show)</span>` : "";
   return `<span class="ns-chip">
     <span class="ns-chip-avatar" style="background:${a.avatar ? "transparent" : tone.solid};overflow:hidden">${avatarHtml}</span>
-    <span class="ns-chip-name">${esc(a.name)}</span>
+    <span class="ns-chip-name">${esc(a.name)}${countLabel}</span>
     <span class="ns-chip-remove" onclick="event.stopPropagation();removeNoShowChip('${pid}','${a.nameKey}')">×</span>
   </span>`;
 }
@@ -3812,8 +3900,8 @@ async function onNoShowCheckboxChange(pid, nameKey, checkboxEl) {
   }
   if (!attendee) return;
   let count = 1;
-  if (attendee.extra > 0) {
-    count = await showNoShowCountConfirm(attendee.name, attendee.extra);
+  if (attendee.weight > 1) {
+    count = await showNoShowCountConfirm(attendee.name, attendee.weight);
     if (count == null) {
       checkboxEl.checked = false; // cancelled — revert the check
       return;
@@ -4996,16 +5084,20 @@ function computeSelfServeCost(poll) {
   const total = costs.reduce((s, c) => s + (c.amount || 0), 0);
   // Court fee: everyone keeps full weight (self + all guests), so "+N" reflects
   // every extra person they brought.
-  const names = attendees.map((a) =>
-    a.extra > 0 ? `${a.name} +${a.extra}` : a.name,
-  );
+  const names = attendees.map((a) => {
+    const isAbsent = a.weight === a.extra && a.extra > 0;
+    let n = a.extra > 0 ? `${a.name} +${a.extra}` : a.name;
+    return { text: n, absent: isAbsent, name: a.name, extra: a.extra };
+  });
   // Other costs: no-shows drop out, so a member's remaining guests are their
   // weight minus their own seat (otherWeight - 1) after subtracting no-shows.
   const otherNames = attendees
     .filter((a) => otherWeight(a) > 0)
     .map((a) => {
-      const g = otherWeight(a) - 1;
-      return g > 0 ? `${a.name} +${g}` : a.name;
+      const isAbsent = a.weight === a.extra && a.extra > 0;
+      const g = otherWeight(a) - (isAbsent ? 0 : 1);
+      let n = g > 0 ? `${a.name} +${g}` : a.name;
+      return { text: n, absent: isAbsent, name: a.name, extra: a.extra };
     });
   const costLines = costs.map((c) => {
     const isCourt = isCourtFeeCost(c.name);
@@ -5042,7 +5134,9 @@ function computeSelfServeCost(poll) {
       paid: !!paidMap[a.nameKey],
       noShow: !!noShows[a.nameKey],
       extra: a.extra || 0,
+      weight: a.weight || 1,
       noShowCount: noShows[a.nameKey] || 0,
+      absent: a.weight === a.extra && a.extra > 0,
     };
   });
   const collected = members
@@ -5092,21 +5186,30 @@ function renderPaymentTab(p) {
   }
   const costLines = (sc.costs || [])
     .map(
-      (c) => `
+      (c) => {
+        // c.names can be [{text, absent}] (self-serve) or ["string"] (session-linked)
+        const namesParts = (c.names || []).map((n) => {
+          if (typeof n === "object" && n.text) {
+            if (n.absent && n.extra > 0) {
+              return `<span style="color:var(--coral);cursor:pointer" onclick="event.stopPropagation();showAbsentTip('${esc(n.name).replace(/'/g, "\\'")}',${n.extra})">${esc(n.text)}</span>`;
+            }
+            return esc(n.text);
+          }
+          return esc(n);
+        });
+        return `
     <div class="cost-line">
       <div style="flex:1">
         <div class="cost-line-name">${esc(c.name || t("costItem"))}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${c.names && c.names.length ? c.names.map(esc).join(", ") : t("unassigned")} · ${fmt(c.perPerson)}${t("perPerson")}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${namesParts.length ? namesParts.join(", ") : t("unassigned")} · ${fmt(c.perPerson)}${t("perPerson")}</div>
       </div>
       <div class="cost-amount">${fmt(c.amount)}</div>
-    </div>`,
+    </div>`;
+      },
     )
     .join("");
   const memberLines = (sc.members || [])
     .map((m) => {
-      const clickable = sc.selfServe
-        ? `onclick="toggleSelfServePaid('${voterPid}','${m.nameKey}')" style="cursor:pointer"`
-        : "";
       let suffix = "";
       if (m.extra > 0) {
         suffix = ` <span style="font-weight:400;color:var(--muted)">(${m.extra})</span>`;
@@ -5116,14 +5219,24 @@ function renderPaymentTab(p) {
       } else if (m.noShow) {
         suffix = ` <span style="font-size:10px;color:var(--hint);font-weight:400">(no-show)</span>`;
       }
+      // Absent = implicit voter who didn't vote for the main option directly,
+      // only voted a "+N" guest option (voting on behalf of their friends).
+      const isAbsent = !!m.absent;
+      const nameStyle = isAbsent ? "color:var(--coral);cursor:pointer" : "";
+      const absentClick = isAbsent && m.extra > 0
+        ? `onclick="event.stopPropagation();showAbsentTip('${esc(m.name).replace(/'/g, "\\'")}',${m.extra})"`
+        : "";
+      const badgeClick = sc.selfServe
+        ? `onclick="event.stopPropagation();toggleSelfServePaid('${voterPid}','${m.nameKey}')" style="cursor:pointer"`
+        : "";
       return `
-    <div class="player-item" style="margin-bottom:6px" ${clickable}>
+    <div class="player-item" style="margin-bottom:6px">
       <div class="avatar ${m.paid ? "av-paid" : ""}">${initials(m.name)}</div>
       <div style="flex:1">
-        <div class="pi-name">${esc(m.name)}${suffix}</div>
+        <div class="pi-name" style="${nameStyle}" ${absentClick}>${esc(m.name)}${suffix}</div>
         <div class="pi-detail ${m.paid ? "paid-detail" : ""}">${m.paid ? t("paidStatus") : t("owes") + " " + fmt(m.amount)}</div>
       </div>
-      <span class="badge-pill ${m.paid ? "badge-green" : "badge-coral"}">${m.paid ? t("paidBadge") : t("notPaidBadge")}</span>
+      <span class="badge-pill ${m.paid ? "badge-green" : "badge-coral"}" ${badgeClick}>${m.paid ? t("paidBadge") : t("notPaidBadge")}</span>
     </div>`;
     })
     .join("");
