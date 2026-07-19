@@ -10,6 +10,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Badminton Club</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%B8%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -28,14 +30,14 @@
       </div>
     </div>
     <nav class="nav-tabs">
-      <button class="nav-tab active" onclick="switchTab('sessions')">📅 Sessions</button>
-      <button class="nav-tab" onclick="switchTab('members')">👥 Members</button>
-      <button class="nav-tab" onclick="switchTab('export')">📤 Export</button>
-      <button class="nav-tab" onclick="switchTab('vote')">🗳️ Vote</button>
+      <button class="nav-tab active" onclick="switchTab('sessions')"><svg class="nav-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><span>Sessions</span></button>
+      <button class="nav-tab" onclick="switchTab('members')"><svg class="nav-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 00-3-3.87"></path><path d="M16 3.13a4 4 0 010 7.75"></path></svg><span>Members</span></button>
+      <button class="nav-tab" onclick="switchTab('export')"><svg class="nav-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg><span>Export</span></button>
+      <button class="nav-tab" onclick="switchTab('vote')"><svg class="nav-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path></svg><span>Vote</span></button>
     </nav>
     <div style="display:flex;gap:6px;flex-shrink:0">
-      <button class="btn btn-ghost btn-sm" onclick="backupData()" title="Backup data to JSON">💾 Backup</button>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('restore-input').click()" title="Restore from JSON file">📂 Restore</button>
+      <button class="btn btn-ghost btn-sm" onclick="backupData()" title="Backup data to JSON"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7368" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg><span>Backup</span></button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('restore-input').click()" title="Restore from JSON file"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7368" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 102.13-9.36L1 10"></path></svg><span>Restore</span></button>
       <input type="file" id="restore-input" accept=".json" style="display:none" onchange="restoreData(this)">
     </div>
   </div>
@@ -62,7 +64,7 @@
   </div>
 
   <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
-    <button class="btn btn-primary" onclick="openNewSession()">+ New Session</button>
+    <button class="btn btn-primary" onclick="openNewSession()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>New Session</span></button>
   </div>
 
   <div id="session-list">
@@ -99,7 +101,7 @@
   <div id="export-sticky" style="display:none;position:sticky;top:56px;z-index:90;background:var(--bg);padding:1.25rem 1.25rem 0">
     <div class="card" style="margin-bottom:0">
       <div class="card-hd">
-        <div class="card-hd-l"><div class="card-ico">📤</div><div><div class="card-title">Export Personal Statement</div><div class="card-sub">Select members and date range</div></div></div>
+        <div class="card-hd-l"><div class="card-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EAF0FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg></div><div><div class="card-title">Export Personal Statement</div><div class="card-sub">Select members and date range</div></div></div>
       </div>
       <div class="card-bd" style="padding-bottom:0">
         <!-- Date range -->
@@ -114,10 +116,10 @@
           </div>
         </div>
         <!-- Hide paid toggle -->
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:10px">
+        <div class="ex-toggle-box" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;margin-bottom:16px">
           <div>
-            <div style="font-size:13px;font-weight:500">Hide Paid sessions</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:1px">Only show unpaid sessions in export</div>
+            <div class="ex-toggle-title">Hide Paid sessions</div>
+            <div style="font-size:12.5px;color:var(--muted);margin-top:2px">Only show unpaid sessions in export</div>
           </div>
           <label for="ex-hide-paid" style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0;cursor:pointer">
             <input type="checkbox" id="ex-hide-paid" style="position:absolute;opacity:0;width:0;height:0">
@@ -133,28 +135,24 @@
           </div>
         </div>
         <div style="position:relative;margin-bottom:10px">
-          <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:var(--hint)">🔍</span>
+          <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);display:flex;pointer-events:none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#A6ABA3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
           <input type="text" id="ex-search" placeholder="Search members…" autocomplete="off"
             oninput="filterExportMembers(this.value)"
-            style="padding-left:30px;background:var(--bg)">
+            style="padding-left:36px;background:var(--bg)">
         </div>
       </div>
     </div>
   </div>
   <!-- Scrollable member list -->
-  <div style="padding:0 1.25rem 100px">
-    <div class="card" style="margin-top:8px;margin-bottom:0;border-top-left-radius:0;border-top-right-radius:0;border-top:none">
-      <div class="card-bd" style="padding-top:10px">
-        <div id="export-member-list"></div>
-        <div id="ex-no-result" style="display:none;text-align:center;font-size:12px;color:var(--hint);padding:10px 0">No members found.</div>
-      </div>
-    </div>
+  <div style="padding:12px 1.25rem 100px">
+    <div id="export-member-list"></div>
+    <div id="ex-no-result" style="display:none;text-align:center;font-size:12px;color:var(--hint);padding:10px 0">No members found.</div>
   </div>
   <!-- Fixed export buttons -->
   <div id="export-fixed-bar" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--surface);border-top:1px solid var(--border);padding:10px 1.25rem;box-shadow:0 -2px 12px rgba(0,0,0,0.08)">
     <div style="max-width:760px;margin:0 auto;display:flex;gap:8px">
-      <button class="btn btn-primary" onclick="doExport()" style="flex:1;justify-content:center">📄 Export HTML</button>
-      <button class="btn btn-green" onclick="doExportImage()" style="flex:1;justify-content:center">🖼️ Export Image</button>
+      <button class="btn btn-primary" onclick="doExport()" style="flex:1;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg><span>Export HTML</span></button>
+      <button class="btn btn-green" onclick="doExportImage()" style="flex:1;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><span>Export Image</span></button>
     </div>
   </div>
   <!-- Hidden render area for image export -->
@@ -173,7 +171,7 @@
   </div>
   <div class="card" id="vote-create-card">
     <div class="card-hd">
-      <div class="card-hd-l"><div class="card-ico">🗳️</div><div><div class="card-title" id="vote-create-title">Create Vote</div><div class="card-sub">Share the link so members can vote to join</div></div></div>
+      <div class="card-hd-l"><div class="card-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EAF0FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"></path></svg></div><div><div class="card-title" id="vote-create-title">Create Vote</div><div class="card-sub">Share the link so members can vote to join</div></div></div>
     </div>
     <div class="card-bd">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -187,16 +185,16 @@
         </div>
       </div>
       <div style="margin-bottom:10px">
-        <label class="field-label">📍 Address</label>
+        <label class="field-label" style="display:flex;align-items:center;gap:6px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16294A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 0118 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>Address</label>
         <input type="text" id="vp-address" placeholder="E.g.: 219 Lý Thường Kiệt, Phường 15, Quận 10, TP.HCM" maxlength="120">
       </div>
       <div style="margin-bottom:10px">
-        <label class="field-label">🗺️ Google Maps link (optional)</label>
+        <label class="field-label">Google Maps link (optional)</label>
         <input type="url" id="vp-maps-link" placeholder="Dán link Google Maps (Share → Copy link)…" maxlength="300">
         <div style="font-size:11px;color:var(--hint);margin-top:4px">Nếu để trống, link sẽ tự tạo từ Address ở trên.</div>
       </div>
       <div style="margin-bottom:10px">
-        <label class="field-label">👤 Người tổ chức (optional)</label>
+        <label class="field-label">Người tổ chức (optional)</label>
         <input type="text" id="vp-organizer" placeholder="Để trống sẽ mặc định là Brian" maxlength="30">
       </div>
       <div style="margin-bottom:10px">
@@ -204,7 +202,7 @@
         <div id="vp-options"></div>
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" id="vote-create-btn" onclick="createPoll()">+ Create Vote</button>
+        <button class="btn btn-primary" id="vote-create-btn" onclick="createPoll()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Create Vote</span></button>
         <button class="btn btn-ghost" id="vote-create-cancel" style="display:none" onclick="cancelEditPoll()">Cancel</button>
       </div>
     </div>
@@ -219,36 +217,39 @@
   <div class="modal">
     <div class="modal-hd">
       <span class="modal-title" id="modal-session-title">New Session</span>
-      <button class="btn-icon" onclick="closeModal('modal-session')" style="font-size:20px">×</button>
+      <button class="btn-icon" onclick="closeModal('modal-session')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
     </div>
     <div class="modal-bd">
-      <div class="field-group">
-        <label class="field-label">Date</label>
-        <input type="date" id="ms-date">
+      <div class="ms-field-grid">
+        <div class="field-group">
+          <label class="field-label">Date</label>
+          <input type="date" id="ms-date">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Note (optional)</label>
+          <input type="text" id="ms-note" placeholder="E.g.: Court ABC, this Saturday…" maxlength="60">
+        </div>
       </div>
       <div class="field-group">
-        <label class="field-label">Note (optional)</label>
-        <input type="text" id="ms-note" placeholder="E.g.: Court ABC, this Saturday…" maxlength="60">
-      </div>
-      <div class="field-group">
-        <label class="field-label">📍 Address</label>
+        <label class="field-label">Address</label>
         <input type="text" id="ms-address" placeholder="E.g.: 219 Lý Thường Kiệt, Phường 15, Quận 10, TP.HCM" maxlength="120">
       </div>
-      <div class="field-group">
-        <label class="field-label">🗺️ Google Maps link (optional)</label>
+      <div id="ms-maps-toggle" class="ms-maps-toggle" onclick="showMapsLinkField()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Add Google Maps link</span></div>
+      <div class="field-group" id="ms-maps-group" style="display:none">
+        <label class="field-label">Google Maps link (optional)</label>
         <input type="url" id="ms-maps-link" placeholder="Dán link Google Maps (Share → Copy link)…" maxlength="300">
         <div style="font-size:11px;color:var(--hint);margin-top:4px">Nếu để trống, link sẽ tự tạo từ Address ở trên.</div>
       </div>
       <hr class="divider">
-      <div class="card-title" style="margin-bottom:10px">💰 Session Costs</div>
+      <div class="card-title" style="margin-bottom:10px">Session Costs</div>
       <div id="cost-lines"></div>
-      <button class="btn btn-ghost btn-sm" onclick="addCostLine()" style="margin-top:4px">+ Add Cost Item</button>
+      <button class="btn btn-ghost btn-sm" onclick="addCostLine()" style="margin-top:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Add Cost Item</span></button>
       <hr class="divider">
-      <div class="card-title" style="margin-bottom:10px">👥 Participants</div>
+      <div class="card-title" style="margin-bottom:10px">Participants</div>
       <div id="ms-members"></div>
       <div class="input-row" style="margin-top:8px">
         <input type="text" id="ms-new-member-inline" placeholder="Add new name…" maxlength="30">
-        <button class="btn btn-ghost btn-sm" onclick="addInlineMember()" style="white-space:nowrap">+ Add</button>
+        <button class="btn btn-ghost btn-sm" onclick="addInlineMember()" style="white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Add</span></button>
       </div>
     </div>
     <div class="modal-ft">
@@ -327,20 +328,20 @@
 
 <!-- ══════════════ PLAYER VOTE PAGE ══════════════ -->
 <div id="voter-view">
-  <div style="text-align:center;padding:18px 0 14px">
-    <div style="font-size:34px">🏸</div>
-    <div style="font-size:17px;font-weight:700;margin-top:4px">Badminton Club</div>
+  <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:18px 0 20px">
+    <div class="vv-logo-icon">🏸</div>
+    <div class="vv-logo-text">Badminton Club</div>
   </div>
-  <div class="card"><div class="card-bd" id="vv-body">
+  <div class="card vv-outer-card"><div class="card-bd" id="vv-body">
     <div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Loading…</div>
   </div></div>
   <input type="file" id="vv-avatar-input" accept="image/*" style="display:none" onchange="onVoterAvatarSelected(this)">
-  <div style="text-align:center;margin-top:16px">
-    <span onclick="openHostCreateModal()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">+ Create your own vote</span>
+  <div class="vv-footer-links" style="text-align:center;margin-top:16px">
+    <span onclick="openHostCreateModal()" style="font-size:13px;font-weight:600;color:var(--green);cursor:pointer">+ Create your own vote</span>
     &nbsp;·&nbsp;
-    <span onclick="openMyHostedVotesModal()" style="font-size:11px;color:var(--hint);cursor:pointer;text-decoration:underline">My hosted votes</span>
+    <span onclick="openMyHostedVotesModal()" style="font-size:13px;font-weight:600;color:var(--green);cursor:pointer">My hosted votes</span>
     &nbsp;·&nbsp;
-    <span onclick="adminLogin()" style="font-size:11px;color:var(--hint);cursor:pointer">Brian</span>
+    <span onclick="adminLogin()" style="font-size:13px;font-weight:600;color:var(--muted);cursor:pointer">Brian</span>
   </div>
 </div>
 
