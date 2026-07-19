@@ -313,12 +313,9 @@ function autoK(el) {
 }
 function updateCostDisplay(el) {
   const v = parseFloat(el.value) || 0;
-  const wrap = el.closest(".cost-input-wrap");
-  if (wrap) {
-    const d = wrap.nextElementSibling;
-    if (d && d.classList.contains("cost-display"))
-      d.textContent = v > 0 ? fmt(v) : "";
-  }
+  const line = el.closest(".cost-line");
+  const d = line && line.querySelector(".cost-display");
+  if (d) d.textContent = v > 0 ? fmt(v) : "";
 }
 
 // ─── TABS ─────────────────────────────────────────────────────────
@@ -680,6 +677,7 @@ function syncSessionCostToPoll(session) {
   });
   const membersSnap = activeMembers.map((m) => ({
     name: m.name,
+    avatar: defaultAvatarFor(m.name) || null,
     amount: calcMemberAmount(session, m.id),
     paid: !!m.paid,
     extra: m.guestCount || 0,
@@ -890,7 +888,7 @@ function renderSessions() {
     html += `<div class="month-group" id="mg-${key}">
       <div class="month-header" onclick="toggleMonth('${key}')">
         <div class="month-header-left">
-          <span class="month-chevron ${collapsed ? "" : "open"}" id="mc-${key}">▶</span>
+          <span class="month-chevron ${collapsed ? "" : "open"}" id="mc-${key}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></span>
           <div>
             <div class="month-title">${monthLabel} ${isCurrentMonth ? '<span class="badge-pill badge-amber" style="font-size:10px;vertical-align:middle">This Month</span>' : ""}</div>
             <div class="month-sub">${mBuoi} sessions · ${allDone ? '<span style="color:var(--green)">Fully Collected</span>' : "Outstanding <strong>" + fmt(mPending) + "</strong>"}</div>
@@ -915,9 +913,9 @@ function renderSessions() {
       const mon = d.toLocaleDateString("en-GB", { month: "short" });
       let badge = "";
       if (paidCount === total && total > 0)
-        badge = '<span class="badge-pill badge-green">✓ Done</span>';
+        badge = '<span class="badge-pill badge-green">Done</span>';
       else if (paidCount === 0)
-        badge = '<span class="badge-pill badge-coral">⏳ Unpaid</span>';
+        badge = '<span class="badge-pill badge-coral">Unpaid</span>';
       else
         badge =
           '<span class="badge-pill badge-amber">' +
@@ -962,6 +960,18 @@ const COST_PRESETS = [
   { name: "Tiền cầu", emoji: "🏸", amount: 0 },
 ];
 
+// Google Maps link starts collapsed behind a "+ Add Google Maps link" toggle
+// (matches the redesigned modal) — expanded automatically when editing a
+// session that already has one saved.
+function setMapsLinkFieldVisible(visible) {
+  document.getElementById("ms-maps-toggle").style.display = visible ? "none" : "flex";
+  document.getElementById("ms-maps-group").style.display = visible ? "block" : "none";
+}
+function showMapsLinkField() {
+  setMapsLinkFieldVisible(true);
+  document.getElementById("ms-maps-link").focus();
+}
+
 function openNewSession() {
   editingSessionId = null;
   tempSessionPollLink = null;
@@ -972,6 +982,7 @@ function openNewSession() {
   document.getElementById("ms-note").value = "Saturday";
   document.getElementById("ms-address").value = "";
   document.getElementById("ms-maps-link").value = "";
+  setMapsLinkFieldVisible(false);
   // All members included; fixed always pre-checked in costs
   tempMembers = members.map((m) => ({ ...m, included: true, guestCount: 0, noShowCount: 0 }));
   tempCosts = COST_PRESETS.map((p) => ({
@@ -1003,6 +1014,7 @@ function openEditSession(sid) {
   document.getElementById("ms-note").value = s.note || "";
   document.getElementById("ms-address").value = s.address || "";
   document.getElementById("ms-maps-link").value = s.mapsUrl || "";
+  setMapsLinkFieldVisible(!!s.mapsUrl);
   tempCosts = s.costs.map((c) => ({ ...c, memberIds: [...c.memberIds] }));
   // Merge saved members with global
   const savedIds = s.members.map((m) => m.id);
@@ -1062,7 +1074,7 @@ function renderCostLines() {
       const allOn =
         includedMembers.length > 0 &&
         includedMembers.every((m) => c.memberIds.includes(m.id));
-      const allToggle = `<span class="share-member share-all ${allOn ? "on" : ""}" onclick="toggleAllCostMembers('${c.id}')">${allOn ? "✓ All" : "All"}</span>`;
+      const allToggle = `<span class="share-member share-all ${allOn ? "on" : ""}" onclick="toggleAllCostMembers('${c.id}')">All</span>`;
       const toggles = includedMembers
         .map((m) => {
           const on = c.memberIds.includes(m.id);
@@ -1071,34 +1083,26 @@ function renderCostLines() {
         .join("");
       const dispVal = c.amount > 0 ? fmt(c.amount) : "";
       const shortVal = c.amount > 0 ? Math.round(c.amount / 1000) : "";
-      return `<div class="cost-line cost-line-top" data-cid="${c.id}">
-      <span class="cost-line-emoji">${c.emoji}</span>
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;gap:6px;margin-bottom:6px">
-          <input class="cost-name-inp" type="text" placeholder="Cost name…" value="${esc(c.name)}"
-            style="flex:1;min-width:0"
-            oninput="tempCosts.find(x=>x.id==='${c.id}').name=this.value"
-            maxlength="30">
-          <input type="text" placeholder="qty" title="Optional quantity, e.g. 2 courts, 5 shuttles — shown as (qty) in text export" value="${esc(c.qty || "")}"
-            style="width:52px;flex-shrink:0;text-align:center"
-            oninput="tempCosts.find(x=>x.id==='${c.id}').qty=this.value"
-            maxlength="10">
-        </div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Apply to:</div>
-        <div class="share-toggle">${allToggle}${toggles}</div>
-      </div>
-      <div class="cost-value-col" style="text-align:right;flex-shrink:0;margin-left:10px">
+      return `<div class="cost-line" data-cid="${c.id}">
+      <div class="cost-line-inputs">
+        <input class="cost-name-inp" type="text" placeholder="Cost name…" value="${esc(c.name)}"
+          oninput="tempCosts.find(x=>x.id==='${c.id}').name=this.value"
+          maxlength="30">
+        <input class="cost-qty-inp" type="text" placeholder="qty" title="Optional quantity, e.g. 2 courts, 5 shuttles — shown as (qty) in text export" value="${esc(c.qty || "")}"
+          oninput="tempCosts.find(x=>x.id==='${c.id}').qty=this.value"
+          maxlength="10">
         <div class="cost-input-wrap">
           <input type="number" class="cost-k" placeholder="0" value="${shortVal}" min="0" step="1"
-            style="text-align:right;width:110px"
             onblur="autoK(this);syncCostAmount('${c.id}',this)"
             onkeydown="if(event.key==='Enter'){autoK(this);syncCostAmount('${c.id}',this)}"
             oninput="syncCostAmount('${c.id}',this)">
           <span class="unit">k</span>
         </div>
-        <div class="cost-display">${dispVal}</div>
+        <button class="btn-icon cost-del" onclick="removeCostLine('${c.id}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
       </div>
-      <button class="btn-icon" onclick="removeCostLine('${c.id}')" style="margin-left:6px;flex-shrink:0">×</button>
+      <div class="cost-display">${dispVal}</div>
+      <div class="cost-apply-label">Apply to</div>
+      <div class="share-toggle">${allToggle}${toggles}</div>
     </div>`;
     })
     .join("");
@@ -1139,10 +1143,10 @@ function toggleAllCostMembers(cid) {
 // separate member entry. Cost splitting weighs this member up accordingly.
 function guestStepperHtml(m) {
   const n = m.guestCount || 0;
-  return `<span style="display:inline-flex;align-items:center;gap:3px;flex-shrink:0" title="Guests this member is bringing (folded into their own cost share)">
-    <button type="button" class="btn-icon" style="width:20px;height:20px;font-size:12px" onclick="changeGuestCount('${m.id}',-1)">−</button>
-    <span class="badge-pill badge-blue" style="min-width:26px;text-align:center;font-size:10px">+${n}</span>
-    <button type="button" class="btn-icon" style="width:20px;height:20px;font-size:12px" onclick="changeGuestCount('${m.id}',1)">+</button>
+  return `<span class="ms-stepper" title="Guests this member is bringing (folded into their own cost share)">
+    <button type="button" class="ms-stepper-btn" onclick="changeGuestCount('${m.id}',-1)">−</button>
+    <span class="ms-stepper-badge ms-stepper-badge-guest">+${n}</span>
+    <button type="button" class="ms-stepper-btn" onclick="changeGuestCount('${m.id}',1)">+</button>
   </span>`;
 }
 function changeGuestCount(mid, delta) {
@@ -1162,10 +1166,10 @@ function changeGuestCount(mid, delta) {
 function noShowStepperHtml(m) {
   const n = m.noShowCount || 0;
   const weight = 1 + (m.guestCount || 0);
-  return `<span style="display:inline-flex;align-items:center;gap:3px;flex-shrink:0" title="How many of this member's own weight (self + guests) were no-shows">
-    <button type="button" class="btn-icon" style="width:20px;height:20px;font-size:12px" onclick="changeNoShowCount('${m.id}',-1)">−</button>
-    <span class="badge-pill ${n > 0 ? "badge-coral" : ""}" style="min-width:26px;text-align:center;font-size:10px">🚫${n}</span>
-    <button type="button" class="btn-icon" style="width:20px;height:20px;font-size:12px" onclick="changeNoShowCount('${m.id}',1)" ${n >= weight ? "disabled" : ""}>+</button>
+  return `<span class="ms-stepper" title="How many of this member's own weight (self + guests) were no-shows">
+    <button type="button" class="ms-stepper-btn" onclick="changeNoShowCount('${m.id}',-1)">−</button>
+    <span class="ms-stepper-badge ${n > 0 ? "ms-stepper-badge-noshow" : ""}">${n}</span>
+    <button type="button" class="ms-stepper-btn" onclick="changeNoShowCount('${m.id}',1)" ${n >= weight ? "disabled" : ""}>+</button>
   </span>`;
 }
 function changeNoShowCount(mid, delta) {
@@ -1186,31 +1190,29 @@ function renderModalMembers() {
   const casual = tempMembers.filter((m) => m.type === "casual");
   let html = "";
   if (fixed.length > 0) {
-    html += `<div style="font-size:10px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.06em;padding:4px 0 6px">⭐ Fixed (always included)</div>`;
+    html += `<div class="ms-group-title ms-group-title-fixed">★ Fixed (always included)</div>`;
     html += fixed
       .map(
         (m) => `
-      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
-        <input type="checkbox" checked disabled style="width:auto;opacity:.5;cursor:not-allowed">
-        <label style="font-size:13px;font-weight:500;flex:1;color:var(--text)">${esc(m.name)}</label>
+      <div class="ms-member-row">
+        <span class="ms-check checked disabled"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></span>
+        <label class="ms-member-name">${esc(m.name)}</label>
         ${guestStepperHtml(m)}
         ${noShowStepperHtml(m)}
-        <span style="font-size:10px;color:var(--amber)">⭐</span>
       </div>`,
       )
       .join("");
   }
   if (casual.length > 0) {
-    html += `<div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;padding:8px 0 6px">🚶 Casual</div>`;
+    html += `<div class="ms-group-title ms-group-title-casual">🏃 Casual</div>`;
     html += casual
       .map(
         (m) => `
-      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
-        <input type="checkbox" id="mm-${m.id}" ${m.included ? "checked" : ""} onchange="toggleModalMember('${m.id}',this.checked)" style="width:auto;cursor:pointer">
-        <label for="mm-${m.id}" style="font-size:13px;font-weight:500;cursor:pointer;flex:1">${esc(m.name)}</label>
+      <div class="ms-member-row">
+        <span class="ms-check ${m.included ? "checked" : ""}" onclick="toggleModalMember('${m.id}',${!m.included})"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></span>
+        <label class="ms-member-name">${esc(m.name)}</label>
         ${guestStepperHtml(m)}
         ${noShowStepperHtml(m)}
-        <span style="font-size:10px;color:var(--muted)">Casual</span>
       </div>`,
       )
       .join("");
@@ -1693,7 +1695,7 @@ function renderExportMembers() {
     .map(
       (m) => `
     <div class="export-player-card" id="exp-card-${m.id}" onclick="toggleExportMember('${m.id}')">
-      <div class="export-check" id="exp-chk-${m.id}">✓</div>
+      <div class="export-check" id="exp-chk-${m.id}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></div>
       <div class="avatar" style="width:30px;height:30px;font-size:11px">${initials(m.name)}</div>
       <div style="flex:1">
         <div class="export-name">${esc(m.name)}</div>
@@ -2514,6 +2516,19 @@ function togglePollOptionSelection(oid) {
   renderPollOptionsEditor();
 }
 
+// Inline line-icon set matching the "Create Vote" admin redesign mock —
+// replaces emoji glyphs so the vote-tab buttons render identically across
+// platforms/fonts instead of relying on each OS's emoji artwork.
+const ICON_X = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5BAAF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+const ICON_LINK = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7368" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007 0l3-3a5 5 0 00-7-7l-1 1"></path><path d="M14 11a5 5 0 00-7 0l-3 3a5 5 0 007 7l1-1"></path></svg>`;
+const ICON_EDIT = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7368" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"></path></svg>`;
+const ICON_LOCK = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7368" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg>`;
+const ICON_REMOVE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7368" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="5.5" y1="18.5" x2="18.5" y2="5.5"></line></svg>`;
+const ICON_CLEAR = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7368" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M8.5 20L18 10.5a2.1 2.1 0 000-3l-1.5-1.5a2.1 2.1 0 00-3 0L4 15.5V20h4.5z"></path><path d="M13.5 7L17 10.5"></path></svg>`;
+const ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"></path></svg>`;
+const ICON_CHECK = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>`;
+const ICON_PLUS = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
+
 function renderPollOptionsEditor() {
   const wrap = document.getElementById(pollOptionsWrapId);
   if (!wrap) return;
@@ -2529,7 +2544,7 @@ function renderPollOptionsEditor() {
         onclick="event.stopPropagation()"
         oninput="updatePollOptionField('${o.id}','label',this.value)">
       <button class="btn-icon vp-option-del" onclick="event.stopPropagation();removePollOption('${o.id}')" title="Delete option"
-        ${tempPollOptions.length <= 1 ? 'disabled style="opacity:.3;cursor:not-allowed"' : ""}>×</button>
+        ${tempPollOptions.length <= 1 ? 'disabled style="opacity:.3;cursor:not-allowed"' : ""}>${ICON_X}</button>
     </div>`;
     })
     .join("");
@@ -2768,7 +2783,7 @@ function cancelEditPoll() {
   tempPollOptions = DEFAULT_POLL_OPTIONS.map((o) => ({ ...o }));
   renderPollOptionsEditor();
   document.getElementById("vote-create-title").textContent = "Create Vote";
-  document.getElementById("vote-create-btn").textContent = "+ Create Vote";
+  document.getElementById("vote-create-btn").innerHTML = `${ICON_PLUS}<span>Create Vote</span>`;
   document.getElementById("vote-create-cancel").style.display = "none";
 }
 
@@ -3066,26 +3081,37 @@ function renderPollList() {
             .join("")}
         </select>`;
       return `<div class="poll-item ${open ? "" : "closed"}">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
         <div style="flex:1;min-width:150px;cursor:pointer" onclick="togglePollExpand('${pid}')">
-          <div style="font-size:13px;font-weight:600">${esc(fmtDate(p.date))}${p.note ? " · " + esc(p.note) : ""}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">
-            <span class="badge-pill ${open ? "badge-green" : "badge-coral"}">${open ? "🟢 Open" : "🔒 Closed"}</span>
-            &nbsp;${summary}
-            ${linkedSession ? '&nbsp;<span class="badge-pill badge-blue">💰 ' + esc(fmtDate(linkedSession.date)) + "</span>" : ""}
+          <div class="vp-card-title">${esc(fmtDate(p.date))}${p.note ? " · " + esc(p.note) : ""}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <span class="badge-pill vp-status-pill ${open ? "badge-green" : "badge-coral"}"><span class="vp-status-dot"></span>${open ? "Open" : "Closed"}</span>
+            <span class="vp-join-count">${summary}</span>
+            ${linkedSession ? '<span class="badge-pill badge-blue">💰 ' + esc(fmtDate(linkedSession.date)) + "</span>" : ""}
           </div>
         </div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-ghost btn-sm" onclick="copyPollLink('${pid}')">📋 Link</button>
-          <button class="btn btn-ghost btn-sm" onclick="editPoll('${pid}')">✏️ Edit</button>
-          <button class="btn btn-ghost btn-sm" onclick="togglePollStatus('${pid}')">${open ? "🔒 Close" : "🔓 Reopen"}</button>
-          <button class="btn btn-green btn-sm" onclick="createSessionFromPoll('${pid}')">🏸 Create Session</button>
+        <button class="btn btn-green btn-sm" onclick="createSessionFromPoll('${pid}')">${ICON_CHECK}<span>Create Session</span></button>
+      </div>
+      <div class="vp-divider"></div>
+      <div class="vp-action-group">
+        <div class="vp-group-title">Edit &amp; share</div>
+        <div class="vp-group-buttons">
+          <button class="btn btn-ghost btn-sm" onclick="copyPollLink('${pid}')">${ICON_LINK}<span>Link</span></button>
+          <button class="btn btn-ghost btn-sm" onclick="editPoll('${pid}')">${ICON_EDIT}<span>Edit</span></button>
+          <button class="btn btn-ghost btn-sm" onclick="togglePollStatus('${pid}')">${ICON_LOCK}<span>${open ? "Close" : "Reopen"}</span></button>
           ${linkSelect}
-          <button class="btn btn-ghost btn-sm" onclick="clearPollLog('${pid}')" title="Delete all Activity log entries for this vote">🧹 Clear Log</button>
-          <button class="btn btn-ghost btn-sm" onclick="renamePollVoter('${pid}')" title="Rename a specific voter's entry">✏️ Rename Voter</button>
-          <button class="btn btn-ghost btn-sm" onclick="removePollVoterByName('${pid}')" title="Remove a specific voter's entry by name">🚫 Remove Voter</button>
-          <button class="btn btn-danger btn-sm" onclick="deletePoll('${pid}')">🗑</button>
         </div>
+      </div>
+      <div class="vp-action-group">
+        <div class="vp-group-title">Voters</div>
+        <div class="vp-group-buttons">
+          <button class="btn btn-ghost btn-sm" onclick="renamePollVoter('${pid}')" title="Rename a specific voter's entry">${ICON_EDIT}<span>Rename Voter</span></button>
+          <button class="btn btn-ghost btn-sm" onclick="removePollVoterByName('${pid}')" title="Remove a specific voter's entry by name">${ICON_REMOVE}<span>Remove Voter</span></button>
+          <button class="btn btn-ghost btn-sm" onclick="clearPollLog('${pid}')" title="Delete all Activity log entries for this vote">${ICON_CLEAR}<span>Clear Log</span></button>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn btn-danger btn-sm" onclick="deletePoll('${pid}')">${ICON_TRASH}<span>Delete Vote</span></button>
       </div>
       ${detail}
     </div>`;
@@ -4750,7 +4776,7 @@ function renderVoterView() {
   body.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       ${langToggle}
-      <span class="badge-pill ${open ? "badge-green" : "badge-coral"}">${open ? "🟢 Open" : "🔒 Closed"}</span>
+      <span class="badge-pill vv-status-pill ${open ? "badge-green" : "badge-coral"}"><span class="vv-status-dot"></span>${open ? "Open" : "Closed"}</span>
     </div>
     <div style="text-align:center;margin-bottom:14px">
       <div style="font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(title)}</div>
@@ -5054,8 +5080,37 @@ function pickCostBasisOption(poll) {
 // Identifies which cost line is "the court fee" (tiền sân) — the only cost
 // a no-show member still owes. Matched by name since hosts can freely rename
 // or add cost lines; "Court Fee" is just the default preset label.
+// Strips Vietnamese tone/diacritic marks so cost-name matching below doesn't
+// have to enumerate every accented variant (e.g. "sân" vs "sằn", "nước" vs
+// "nứơc") — normalize to plain ASCII-ish letters first, then match.
+function stripDiacritics(name) {
+  return (name || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/gi, (m) => (m === "đ" ? "d" : "D"));
+}
 function isCourtFeeCost(name) {
-  return /court|s[aâ]n/i.test((name || "").trim());
+  return /court|san/i.test(stripDiacritics(name).trim());
+}
+function isShuttleCost(name) {
+  return /shuttle|cau/i.test(stripDiacritics(name).trim());
+}
+function isWaterCost(name) {
+  return /water|nuoc/i.test(stripDiacritics(name).trim());
+}
+// Small inline icon set matching the redesigned cost cards — falls back to
+// a plain dot for any custom cost line the host adds (e.g. "Sân tập thêm").
+function costIcon(name) {
+  if (isCourtFeeCost(name)) {
+    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><line x1="3" y1="12" x2="21" y2="12"></line><line x1="12" y1="3" x2="12" y2="21"></line></svg>`;
+  }
+  if (isShuttleCost(name)) {
+    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l3 6-9 9-3-6z"></path><circle cx="12" cy="3" r="1.4" fill="var(--muted)" stroke="none"></circle></svg>`;
+  }
+  if (isWaterCost(name)) {
+    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s6 7 6 11a6 6 0 1 1-12 0c0-4 6-11 6-11z"></path></svg>`;
+  }
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle></svg>`;
 }
 function computeSelfServeCost(poll) {
   const costs = (poll.costs || []).filter((c) => c.name || c.amount > 0);
@@ -5130,6 +5185,7 @@ function computeSelfServeCost(poll) {
     return {
       name: a.name,
       nameKey: a.nameKey,
+      avatar: a.avatar || defaultAvatarFor(a.name) || null,
       amount: Math.ceil(amount / 1000) * 1000,
       paid: !!paidMap[a.nameKey],
       noShow: !!noShows[a.nameKey],
@@ -5198,26 +5254,30 @@ function renderPaymentTab(p) {
           return esc(n);
         });
         return `
-    <div class="cost-line">
-      <div style="flex:1">
-        <div class="cost-line-name">${esc(c.name || t("costItem"))}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">${namesParts.length ? namesParts.join(", ") : t("unassigned")} · ${fmt(c.perPerson)}${t("perPerson")}</div>
+    <div class="cost-card">
+      <div class="cost-card-top">
+        <div class="cost-card-left">
+          <div class="cost-icon">${costIcon(c.name)}</div>
+          <div class="cost-card-name">${esc(c.name || t("costItem"))}</div>
+        </div>
+        <div class="cost-card-amount">${fmt(c.amount)}</div>
       </div>
-      <div class="cost-amount">${fmt(c.amount)}</div>
+      <div class="cost-card-detail"><span class="cost-card-names">${namesParts.length ? namesParts.join(", ") : t("unassigned")}</span><span class="cost-card-per-person">${fmt(c.perPerson)}${t("perPerson")}</span></div>
     </div>`;
       },
     )
     .join("");
   const memberLines = (sc.members || [])
     .map((m) => {
-      let suffix = "";
+      let countLabel = "";
+      let noShowLabel = "";
       if (m.extra > 0) {
-        suffix = ` <span style="font-weight:400;color:var(--muted)">(${m.extra})</span>`;
+        countLabel = `<span class="pi-count">(${m.extra})</span>`;
         if (m.noShowCount > 0) {
-          suffix += ` <span style="font-size:10px;color:var(--hint);font-weight:400">- (${m.noShowCount} no show)</span>`;
+          noShowLabel = `<span class="pi-noshow">· ${m.noShowCount} no show</span>`;
         }
       } else if (m.noShow) {
-        suffix = ` <span style="font-size:10px;color:var(--hint);font-weight:400">(no-show)</span>`;
+        noShowLabel = `<span class="pi-noshow">· no-show</span>`;
       }
       // Absent = implicit voter who didn't vote for the main option directly,
       // only voted a "+N" guest option (voting on behalf of their friends).
@@ -5229,12 +5289,18 @@ function renderPaymentTab(p) {
       const badgeClick = sc.selfServe
         ? `onclick="event.stopPropagation();toggleSelfServePaid('${voterPid}','${m.nameKey}')" style="cursor:pointer"`
         : "";
+      const tone = avatarToneFor(m);
+      const avatarStyle = m.avatar
+        ? "overflow:hidden"
+        : `background:${tone.bg};color:${tone.text}`;
       return `
-    <div class="player-item" style="margin-bottom:6px">
-      <div class="avatar ${m.paid ? "av-paid" : ""}">${initials(m.name)}</div>
-      <div style="flex:1">
-        <div class="pi-name" style="${nameStyle}" ${absentClick}>${esc(m.name)}${suffix}</div>
-        <div class="pi-detail ${m.paid ? "paid-detail" : ""}">${m.paid ? t("paidStatus") : t("owes") + " " + fmt(m.amount)}</div>
+    <div class="player-item ${m.paid ? "paid-item" : ""}" style="margin-bottom:6px">
+      <div class="avatar" style="${avatarStyle}">${m.avatar ? `<img src="${esc(m.avatar)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : initials(m.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="pi-name-row">
+          <span class="pi-name" style="${nameStyle}" ${absentClick}>${esc(m.name)}</span>${countLabel}${noShowLabel}
+        </div>
+        <div class="pi-detail ${m.paid ? "paid-detail" : ""}">${m.paid ? t("paidStatus") : t("owes") + ` <span class="pi-debt-amount">${fmt(m.amount)}</span>`}</div>
       </div>
       <span class="badge-pill ${m.paid ? "badge-green" : "badge-coral"}" ${badgeClick}>${m.paid ? t("paidBadge") : t("notPaidBadge")}</span>
     </div>`;
