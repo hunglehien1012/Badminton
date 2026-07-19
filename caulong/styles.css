@@ -17,12 +17,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .site-header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 1.25rem;position:sticky;top:0;z-index:200}
 .header-inner{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px;gap:10px}
 .logo{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.logo-icon{width:32px;height:32px;background:var(--text);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:17px}
-.logo-text{font-size:14px;font-weight:600;letter-spacing:-0.02em}
+.logo-icon{width:38px;height:38px;background:#16294A;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.logo-text{font-family:'Manrope',sans-serif;font-size:16px;font-weight:800;letter-spacing:-0.01em;color:#1C231E}
 .logo-sub{font-size:11px;color:var(--muted)}
-.nav-tabs{display:flex;gap:2px;background:var(--bg);border-radius:9px;padding:3px}
-.nav-tab{padding:6px 14px;border-radius:7px;font-size:13px;font-weight:500;border:none;background:transparent;cursor:pointer;color:var(--muted);transition:all .15s}
-.nav-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.1)}
+.nav-tabs{display:flex;gap:6px;background:transparent;border-radius:0;padding:0}
+.nav-tab{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:10px;font-size:13.5px;font-weight:600;border:none;background:transparent;cursor:pointer;color:#6B7368;transition:all .15s;font-family:inherit}
+.nav-tab:hover{background:var(--bg)}
+.nav-tab.active{background:#16294A;color:#fff;font-weight:700;box-shadow:none}
+.nav-tab.active:hover{background:#0D1A30}
+.nav-ico{flex-shrink:0}
+.site-header .btn-ghost{border:1.5px solid #E4E5E0;border-radius:10px;color:#1C231E;font-weight:600;font-size:13px;gap:6px;padding:8px 14px}
+.site-header .btn-ghost:hover{background:#FAFAF8}
 
 /* VOTER PAGE TABS (Chi tiết / Vote / Người tham gia / Thanh toán) */
 .vv-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
@@ -63,8 +68,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .month-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;user-select:none;box-shadow:var(--shadow);transition:background .15s}
 .month-header:hover{background:var(--bg)}
 .month-header-left{display:flex;align-items:center;gap:10px}
-.month-chevron{font-size:11px;color:var(--muted);transition:transform .2s;display:inline-block}
-.month-chevron.open{transform:rotate(90deg)}
+.month-chevron{font-size:11px;color:var(--muted);transition:transform .2s;display:inline-flex;transform:rotate(-90deg)}
+.month-chevron.open{transform:rotate(0deg)}
 .month-title{font-size:14px;font-weight:600;margin-bottom:2px}
 .month-sub{font-size:11px;color:var(--muted)}
 .month-stat{text-align:right;flex-shrink:0}
@@ -177,6 +182,16 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
 .cost-line-emoji{font-size:15px;flex-shrink:0}
 .cost-line-name{flex:1;font-size:13px;font-weight:500}
 .cost-amount{font-size:13px;font-weight:600;min-width:80px;text-align:right}
+.cost-card{background:var(--bg);border-radius:14px;padding:12px 12px;margin-bottom:8px}
+.cost-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cost-card-left{display:flex;align-items:center;gap:10px;min-width:0}
+.cost-icon{width:32px;height:32px;border-radius:10px;background:var(--surface);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cost-card-name{font-size:13px;font-weight:700;color:var(--text)}
+.cost-card-amount{font-size:14px;font-weight:700;color:var(--text);flex-shrink:0}
+.cost-card-detail{font-size:11px;color:var(--muted);margin-top:6px;padding-left:42px;line-height:1.5}
+.cost-card-names{display:block}
+.cost-card-per-person{display:block}
+.cost-card-per-person::before{content:"· "}
 .cost-input-wrap{position:relative;width:130px}
 .cost-input-wrap input{text-align:right;padding-right:24px}
 .cost-input-wrap input[type=number]::-webkit-outer-spin-button,
@@ -198,9 +213,13 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
 .player-item.paid-item{background:var(--green-l);border-color:var(--green-m)}
 .avatar{width:34px;height:34px;border-radius:50%;background:var(--purple-l);color:var(--purple);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
 .avatar.av-paid{background:var(--green-m);color:var(--green-d)}
+.pi-name-row{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
 .pi-name{font-size:13px;font-weight:600}
+.pi-count{font-size:11px;color:var(--muted);font-weight:400}
+.pi-noshow{font-size:10px;color:var(--hint);font-weight:400}
 .pi-detail{font-size:11px;color:var(--muted);margin-top:1px}
 .pi-detail.paid-detail{color:var(--green)}
+.pi-debt-amount{font-weight:600;color:var(--text)}
 .pi-actions{display:flex;align-items:center;gap:5px;flex-shrink:0;margin-left:auto}
 .btn-pay-toggle{font-size:11px;font-family:inherit;font-weight:500;padding:4px 10px;border-radius:20px;cursor:pointer;border:1.5px solid var(--green);background:transparent;color:var(--green-d);transition:all .15s}
 .btn-pay-toggle:hover{background:var(--green);color:#fff}
@@ -413,4 +432,194 @@ label.field-label{font-size:11px;color:var(--muted);font-weight:500;display:bloc
    nothing else in the cascade can re-introduce a height mismatch between them. */
 .hm-form .cost-name-inp,.hm-form .cost-k{height:44px!important;padding:10px 12px!important;box-sizing:border-box!important;line-height:20px}
 .hm-cost-remove{background:transparent;border:none;cursor:pointer;color:var(--muted);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s}
+
+/* ═══════════════ VOTER VIEW REDESIGN (navy/blue, per Badminton Payment mock) ═══════════════
+   Scoped entirely to #voter-view so the rest of the app (Manage, Sessions, host view…)
+   keeps its original palette — only variables inside this subtree are overridden. */
+#voter-view{
+  --text:#132437; --muted:#8b988f; --hint:#a7b3ab;
+  --bg:#f7f9f7; --surface:#ffffff;
+  --border:#eef1ee; --border-s:#dfe4df;
+  --green:#1e3a5f; --green-l:#e3ecf7; --green-d:#1e3a5f; --green-m:#c9d9ec;
+  --coral:#d6752f; --coral-l:#fdeee0; --coral-m:#f6d9bd;
+  --purple-l:#e3ecf7; --purple:#1e3a5f;
+  --blue:#2f6fb0; --blue-l:#e3ecf7;
+  --shadow:0 20px 50px -20px rgba(19,36,55,0.25);
+  min-height:100vh;background:radial-gradient(circle at 50% -10%,#dde7f2 0%,#eef1f5 40%);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text);
+}
+#voter-view [style*="font-weight:700"],#voter-view [style*="font-weight:800"]{font-family:'Manrope',sans-serif;letter-spacing:-0.01em}
+#voter-view a{color:var(--green)}
+#voter-view a:hover{color:#14273f}
+.vv-logo-icon{width:44px;height:44px;border-radius:12px;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:22px}
+.vv-logo-text{font-family:'Manrope',sans-serif;font-weight:800;font-size:22px;color:var(--text);letter-spacing:-0.01em}
+#voter-view .vv-outer-card{border:none;border-radius:24px;box-shadow:var(--shadow)}
+#voter-view .vv-tabs{border-bottom:none;margin-bottom:0;background:var(--surface)}
+#voter-view .vv-tab{padding:10px 0;font-weight:700}
+#voter-view .vv-tab.active{border-bottom-color:var(--green);color:var(--text)}
+#voter-view .badge-pill{border-radius:100px;font-weight:700}
+#voter-view .cost-card{background:var(--bg);border-radius:14px}
+#voter-view .cost-icon{background:#eef0ee}
+#voter-view .player-item{border-radius:16px;box-shadow:none;background:#fbfbfa;border-color:var(--border);padding:12px 12px}
+#voter-view .player-item.paid-item{background:var(--green-l);border-color:var(--green-m)}
+#voter-view .avatar{width:40px;height:40px;font-size:15px;font-weight:800}
+#voter-view .pi-name{font-size:15px;font-weight:800;color:var(--text)}
+#voter-view .pi-count{font-size:12px;font-weight:600;color:var(--muted)}
+#voter-view .pi-noshow{font-size:11px;font-weight:600;color:#c98a3f}
+#voter-view .pi-detail{font-size:13px;font-weight:600;margin-top:2px}
+#voter-view .pi-debt-amount{font-weight:800;color:var(--text)}
+#voter-view .badge-pill.badge-green{background:var(--green);color:#fff}
+#voter-view .badge-coral{color:#c76a2c}
+#voter-view .vv-status-pill{gap:6px;padding:6px 12px}
+#voter-view .vv-status-pill.badge-green{background:var(--green-l);color:var(--green)}
+#voter-view .vv-status-pill.badge-coral{background:var(--coral-l);color:#c76a2c}
+#voter-view .vv-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+#voter-view .vv-status-pill.badge-green .vv-status-dot{background:var(--blue);box-shadow:0 0 0 3px rgba(47,111,176,0.25)}
+#voter-view .vv-status-pill.badge-coral .vv-status-dot{background:#d6752f;box-shadow:0 0 0 3px rgba(214,117,47,0.25)}
+#voter-view .vv-vote-btn{background:var(--green);color:#fff;border-radius:14px}
+#voter-view .vv-vote-btn:hover{background:#14273f}
 .hm-cost-remove:hover{background:var(--bg);color:var(--text)}
+
+/* ═══════════════ ADMIN "VOTE" TAB REDESIGN (navy, per Create Vote mock) ═══════════════
+   Scoped to #tab-vote only — other admin tabs (Sessions, Members…) keep their look. */
+#tab-vote .card{border:none;border-radius:20px;box-shadow:0 1px 2px rgba(20,30,20,0.05),0 12px 32px -16px rgba(22,41,74,0.14)}
+#tab-vote #vote-create-card .card-hd{background:#16294A;padding:24px 26px;border-bottom:none}
+#tab-vote #vote-create-card .card-ico{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,0.14)}
+#tab-vote #vote-create-card .card-title{font-family:'Manrope',sans-serif;font-weight:800;font-size:19px;color:#fff;letter-spacing:-0.01em}
+#tab-vote #vote-create-card .card-sub{font-size:13px;color:#B9C4D9;margin-top:2px}
+#tab-vote .card-bd{padding:26px}
+#tab-vote label.field-label{font-size:11px;font-weight:700;color:#7C8578;letter-spacing:.06em;margin-bottom:7px}
+#tab-vote input[type=text],#tab-vote input[type=date],#tab-vote input[type=url]{padding:12px 14px;border-radius:12px;border:1.5px solid #E4E5E0;background:#FAFAF8;font-size:14px}
+#tab-vote .fb-opt{border-radius:14px;padding:14px 16px;border:1.5px solid #E4E5E0;background:#FAFAF8}
+#tab-vote .fb-check{width:20px;height:20px;border-radius:6px;border:2px solid #C7CBC0;background:#fff}
+#tab-vote .fb-opt.sel .fb-check{background:#16294A;border-color:#16294A}
+#tab-vote .fb-add-option{border-radius:14px;border:1.5px dashed #C7CBC0;color:#7C8578;font-weight:600}
+#tab-vote .fb-add-circle{background:#16294A}
+#tab-vote .fb-add-label{color:#7C8578;font-weight:600}
+#tab-vote #vote-create-btn{background:#16294A;border-color:#16294A;font-family:'Manrope',sans-serif;font-weight:700;border-radius:14px;padding:14px}
+#tab-vote .btn-green{background:#16294A;border-color:#16294A}
+#tab-vote .poll-item{border:none;border-radius:20px;box-shadow:0 1px 2px rgba(20,30,20,0.05),0 12px 32px -16px rgba(22,41,74,0.1);padding:20px 22px}
+#tab-vote .vp-card-title{font-family:'Manrope',sans-serif;font-weight:800;font-size:15px;color:#1C231E}
+#tab-vote .vp-join-count{font-size:12px;color:#7C8578;font-weight:600}
+#tab-vote .vp-divider{height:1px;background:#EEEFEA;margin-bottom:14px}
+#tab-vote .vp-action-group{margin-bottom:14px}
+#tab-vote .vp-group-title{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#A6ABA3;margin-bottom:8px}
+#tab-vote .vp-group-buttons{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#tab-vote .vp-status-pill{gap:5px;padding:4px 10px;border-radius:20px}
+#tab-vote .vp-status-pill.badge-green{background:#E4F1E7;color:#1E7A47}
+#tab-vote .vp-status-pill.badge-coral{background:#FBEDEA;color:#C24A2F}
+#tab-vote .vp-status-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+#tab-vote .vp-status-pill.badge-green .vp-status-dot{background:#2DA860}
+#tab-vote .vp-status-pill.badge-coral .vp-status-dot{background:#C24A2F}
+#tab-vote .btn-ghost{background:#fff;border:1.5px solid #E4E5E0;color:#1C231E;font-weight:600;border-radius:10px}
+#tab-vote .btn-ghost:hover{background:#FAFAF8}
+#tab-vote .btn-danger{background:#FBEDEA;color:#C24A2F;border:none;border-radius:10px;font-weight:600}
+#tab-vote .btn-danger:hover{background:#f6ddd6}
+#tab-vote .vp-group-buttons select{width:auto;border-radius:10px;border:1.5px solid #E4E5E0;background:#fff;color:#1C231E;font-weight:600}
+
+/* ═══════════════ ADMIN "EXPORT" TAB REDESIGN (navy, per Export Statement mock) ═══════════════
+   Scoped to #tab-export only — other admin tabs keep their look. */
+#tab-export .card{border:none;border-radius:20px;box-shadow:0 1px 2px rgba(20,30,20,0.05),0 12px 32px -16px rgba(22,41,74,0.14);overflow:hidden}
+#tab-export .card-hd{background:#16294A;padding:24px 26px;border-bottom:none}
+#tab-export .card-ico{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,0.14)}
+#tab-export .card-title{font-family:'Manrope',sans-serif;font-weight:800;font-size:19px;color:#fff;letter-spacing:-0.01em}
+#tab-export .card-sub{font-size:13px;color:#B9C4D9;margin-top:2px}
+#tab-export .card-bd{padding:26px}
+#tab-export label.field-label{font-size:11px;font-weight:700;color:#7C8578;letter-spacing:.06em;margin-bottom:7px}
+#tab-export input[type=date],#tab-export input[type=text]{padding:12px 14px;border-radius:12px;border:1.5px solid #E4E5E0;background:#FAFAF8;font-size:14px;font-weight:600}
+#tab-export .ex-toggle-box{border-radius:14px;border:1.5px solid #E4E5E0;background:#FAFAF8}
+#tab-export .ex-toggle-title{font-family:'Manrope',sans-serif;font-weight:700;font-size:14px;color:#1C231E}
+#tab-export .btn-xs{border-radius:8px;border:1.5px solid #E4E5E0;background:#fff;color:#1C231E;font-weight:600;font-size:12.5px;padding:6px 12px}
+#tab-export .btn-xs:hover{background:#FAFAF8}
+#tab-export .export-player-card{border:none;border-radius:16px;padding:14px 18px;gap:14px;box-shadow:0 1px 2px rgba(20,30,20,0.04)}
+#tab-export .export-player-card.selected{background:#fff}
+#tab-export .export-check{width:22px;height:22px;border-radius:6px;border:2px solid #C7CBC0;background:#fff;display:flex;align-items:center;justify-content:center}
+#tab-export .export-check svg{opacity:0}
+#tab-export .export-player-card.selected .export-check{background:#16294A;border-color:#16294A}
+#tab-export .export-player-card.selected .export-check svg{opacity:1}
+#tab-export .avatar{width:38px!important;height:38px!important;font-size:14px!important;font-weight:800;background:#E4E9F5;color:#3A4E7A}
+#tab-export .export-name{font-family:'Manrope',sans-serif;font-weight:800;font-size:15px;color:#1C231E}
+#tab-export .export-stats{font-size:12.5px;color:#8B928A;margin-top:2px}
+#tab-export #ex-hide-paid:checked~.toggle-track,#tab-export #ex-hide-paid:checked+.toggle-track{background:#16294A}
+#export-fixed-bar .btn-primary{background:#16294A;border-color:#16294A;border-radius:12px;font-weight:700;padding:13px}
+#export-fixed-bar .btn-green{background:#1E7A47;border-color:#1E7A47;border-radius:12px;font-weight:700;padding:13px}
+
+/* ═══════════════ ADMIN "SESSIONS" TAB REDESIGN (navy, per Sessions mock) ═══════════════
+   Scoped to #tab-sessions only — other admin tabs keep their look. */
+#tab-sessions .stat-card{border:none;border-radius:16px;box-shadow:0 1px 2px rgba(20,30,20,0.05)}
+#tab-sessions .stat-label{color:#7C8578;font-weight:700}
+#tab-sessions .stat-value{font-family:'Manrope',sans-serif;font-weight:800;font-size:26px;color:#1C231E}
+#tab-sessions .stat-value.green{color:#1E7A47}
+#tab-sessions .stat-value.coral{color:#C24A2F}
+#tab-sessions .stat-sub{color:#8B928A;font-size:12.5px}
+#tab-sessions .btn-primary{background:#16294A;border-color:#16294A;border-radius:12px;font-weight:700;padding:11px 18px}
+#tab-sessions .month-group>.month-header{border:none;border-radius:16px;box-shadow:0 1px 2px rgba(20,30,20,0.05);padding:16px 20px}
+#tab-sessions .month-title{font-family:'Manrope',sans-serif;font-weight:800;font-size:16px;color:#1C231E}
+#tab-sessions .month-sub{color:#8B928A;font-size:12.5px}
+#tab-sessions .month-stat>div:first-child{font-family:'Manrope',sans-serif;font-weight:800;font-size:17px;color:#1C231E}
+#tab-sessions .month-stat>div:last-child{color:#8B928A;font-size:12.5px}
+#tab-sessions .session-item{border:none;border-radius:16px;box-shadow:0 1px 2px rgba(20,30,20,0.04);padding:16px 20px;gap:16px}
+#tab-sessions .session-date-badge{background:#16294A;border-radius:12px;width:52px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#tab-sessions .session-date-badge .day{font-family:'Manrope',sans-serif;font-weight:800;font-size:17px}
+#tab-sessions .session-date-badge .mon{color:#B9C4D9;font-weight:600}
+#tab-sessions .session-name{font-family:'Manrope',sans-serif;font-weight:800;font-size:15px;color:#1C231E}
+#tab-sessions .session-info{color:#8B928A;font-size:12.5px}
+#tab-sessions .session-total{font-family:'Manrope',sans-serif;font-weight:800;font-size:16px;color:#1C231E}
+#tab-sessions .session-total small{color:#8B928A;font-weight:400}
+#tab-sessions .badge-pill.badge-green{background:#E4F1E7;color:#1E7A47}
+#tab-sessions .badge-pill.badge-coral{background:#FBEDEA;color:#C24A2F}
+
+/* ═══════════════ NEW/EDIT SESSION MODAL REDESIGN (scoped to #modal-session) ═══════════════ */
+#modal-session .modal{border-radius:20px;max-width:640px;box-shadow:0 24px 60px -20px rgba(20,30,20,0.4)}
+#modal-session .modal-hd{padding:20px 26px;border-bottom:1px solid #EEEFEA}
+#modal-session .modal-title{font-family:'Manrope',sans-serif;font-weight:800;font-size:18px;color:#1C231E}
+#modal-session .btn-icon{color:#A6ABA3}
+#modal-session .btn-icon:hover{color:#6B7368}
+#modal-session .modal-bd{padding:24px 26px}
+#modal-session .modal-ft{padding:18px 26px;border-top:1px solid #EEEFEA}
+#modal-session label.field-label{font-size:12.5px;font-weight:600;color:#6B7368;text-transform:none;letter-spacing:normal}
+#modal-session .modal{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif}
+#modal-session input,#modal-session label,#modal-session .btn{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif}
+#modal-session input[type=text],#modal-session input[type=date],#modal-session input[type=url],#modal-session input[type=number]{padding:11px 12px;border-radius:10px;border:1.5px solid #E4E5E0;background:#FAFAF8;font-size:14px;color:#1C231E}
+#modal-session input:focus{border-color:#16294A}
+#modal-session input::placeholder{color:#A6ABA3}
+#modal-session .divider{background:#EEEFEA;border:none;height:1px;margin:18px 0}
+#modal-session .card-title{font-family:'Manrope',sans-serif;font-weight:800;font-size:15px;color:#1C231E}
+#modal-session .btn-ghost{border:1.5px solid #E4E5E0;border-radius:10px;color:#1C231E;font-weight:600}
+#modal-session .btn-primary{background:#16294A;border-color:#16294A;border-radius:12px;font-weight:700}
+#modal-session .cost-line{display:block;border:1.5px solid #E4E5E0;border-radius:14px;padding:14px 16px;margin-bottom:12px;background:#FAFAF8}
+#modal-session .cost-line-emoji{display:none}
+#modal-session .cost-line-inputs{display:flex;align-items:center;gap:10px}
+#modal-session input.cost-name-inp{flex:1;min-width:0;background:#fff}
+#modal-session input.cost-qty-inp{width:64px;flex:none;text-align:center;background:#fff}
+#modal-session .cost-input-wrap{width:90px;flex:none}
+#modal-session .cost-input-wrap input{background:#fff;text-align:right;padding-right:22px;width:100%}
+#modal-session .cost-input-wrap .unit{color:#8B928A}
+#modal-session .cost-del{flex:none;color:#B5BAAF}
+#modal-session .cost-del:hover{color:#C24A2F}
+#modal-session .cost-display{text-align:right;font-size:11px;color:#8B928A;margin-top:6px}
+#modal-session .cost-display:empty{display:none}
+#modal-session .cost-apply-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7C8578;margin:12px 0 8px}
+#modal-session .share-member{padding:6px 14px;border-radius:100px;font-size:13px;font-weight:700;border:1.5px solid #E4E5E0;background:#fff;color:#6B7368}
+#modal-session .share-member.on{background:#1E7A47;border-color:#1E7A47;color:#fff}
+#modal-session .share-all{border-color:#C7CBC0;color:#1C231E}
+#modal-session .share-all.on{background:#1E7A47;border-color:#1E7A47;color:#fff}
+#modal-session .ms-group-title{font-size:12.5px;font-weight:700;padding:4px 0 8px}
+#modal-session .ms-group-title-fixed{color:#B27A1E}
+#modal-session .ms-group-title-casual{color:#7C8578}
+#modal-session .ms-member-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:#FAFAF8;border:1.5px solid #E4E5E0;flex-wrap:wrap;margin-bottom:6px}
+#modal-session .ms-check{width:20px;height:20px;border-radius:6px;border:2px solid #C7CBC0;background:#fff;display:inline-flex;align-items:center;justify-content:center;flex:none;cursor:pointer}
+#modal-session .ms-check svg{opacity:0}
+#modal-session .ms-check.checked{background:#16294A;border-color:#16294A}
+#modal-session .ms-check.checked svg{opacity:1}
+#modal-session .ms-check.disabled{cursor:not-allowed;opacity:.7}
+#modal-session .ms-member-name{font-family:'Manrope',sans-serif;font-weight:700;font-size:14px;color:#1C231E;flex:1;min-width:70px}
+#modal-session .ms-stepper{display:inline-flex;align-items:center;gap:6px;flex:none}
+#modal-session .ms-stepper-btn{width:34px;height:34px;border-radius:9px;border:1.5px solid #E4E5E0;background:#fff;color:#6B7368;font-weight:700;font-size:16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+#modal-session .ms-stepper-btn:hover{background:#FAFAF8}
+#modal-session .ms-stepper-badge{min-width:32px;text-align:center;padding:5px 6px;border-radius:8px;font-size:13px;font-weight:700;color:#8B928A}
+#modal-session .ms-stepper-badge-guest{background:#E4E9F5;color:#3A4E7A;min-width:26px}
+#modal-session .ms-stepper-badge-noshow.ms-stepper-badge{background:#FBEDEA;color:#C24A2F}
+#modal-session .ms-field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#modal-session .ms-maps-toggle{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:#16294A;cursor:pointer;margin-bottom:14px;padding:4px 0}
+#modal-session .ms-maps-toggle:hover{color:#0D1A30}
