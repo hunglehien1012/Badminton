@@ -162,6 +162,7 @@ const NAME_AVATARS = {
   Thạnh: "avatars/Thanh.jpg",
   Mai: "avatars/Mai.jpg",
   Hùng: "avatars/avat.jpeg",
+  Mike: "avatars/Mike.jpg",
 };
 // Chuẩn hoá mỗi tên đã map thành các "từ" (token) để so khớp theo từ.
 const _NAME_AVATAR_ENTRIES = Object.entries(NAME_AVATARS).map(([k, v]) => {
