@@ -162,7 +162,6 @@ const NAME_AVATARS = {
   Thạnh: "avatars/Thanh.jpg",
   Mai: "avatars/Mai.jpg",
   Hùng: "avatars/avat.jpeg",
-  Mike: "avatars/Mike.jpg",
 };
 // Chuẩn hoá mỗi tên đã map thành các "từ" (token) để so khớp theo từ.
 const _NAME_AVATAR_ENTRIES = Object.entries(NAME_AVATARS).map(([k, v]) => {
@@ -1395,6 +1394,10 @@ const VOTER_STRINGS = {
   noAddress: { en: "No address yet.", vi: "Chưa có địa chỉ." },
   organizer: { en: "Organizer", vi: "Người tổ chức" },
   totalVoters: { en: "Total voters", vi: "Tổng số người vote" },
+  totalVotersSub: {
+    en: "People who voted at least once",
+    vi: "Người đã bình chọn ít nhất một lần",
+  },
   noVotesYet: {
     en: "No one has voted yet.",
     vi: "Chưa có ai tham gia bình chọn.",
@@ -4779,9 +4782,9 @@ function renderVoterView() {
       ${langToggle}
       <span class="badge-pill vv-status-pill ${open ? "badge-green" : "badge-coral"}"><span class="vv-status-dot"></span>${open ? "Open" : "Closed"}</span>
     </div>
-    <div style="text-align:center;margin-bottom:14px">
-      <div style="font-size:19px;font-weight:700;letter-spacing:-.01em">${esc(title)}</div>
-      <div style="font-size:16px;font-weight:600;color:var(--muted);margin-top:4px">${esc(fmtDate(p.date))}</div>
+    <div style="text-align:center;margin-bottom:26px">
+      <div style="font-size:26px;font-weight:800;letter-spacing:-.01em;color:var(--text)">${esc(title)}</div>
+      <div style="font-size:18px;color:var(--hint);font-weight:600;margin-top:6px">${esc(fmtDate(p.date))}</div>
     </div>
     ${tabBar}
     ${tabContent}`;
@@ -4805,12 +4808,10 @@ function renderParticipantsTab(p, groups) {
   const organizerName = (p && p.organizer && p.organizer.trim()) || "Brian";
   const organizerAvatar = defaultAvatarFor(organizerName);
   const organizerRow = `
-    <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">${t("organizer")}</div>
-    <div class="player-item" style="margin-bottom:18px">
-      <div class="avatar" style="${organizerAvatar ? "overflow:hidden" : ""}">${organizerAvatar ? `<img src="${esc(organizerAvatar)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : initials(organizerName)}</div>
-      <div style="flex:1">
-        <div class="pi-name">${esc(organizerName)}</div>
-      </div>
+    <div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">${t("organizer")}</div>
+    <div style="display:flex;align-items:center;gap:14px;background:var(--bg);border-radius:16px;padding:14px 18px;margin-bottom:26px">
+      <div style="width:44px;height:44px;border-radius:50%;background:#c98a3e;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:17px;flex-shrink:0;overflow:hidden">${organizerAvatar ? `<img src="${esc(organizerAvatar)}" alt="" style="width:100%;height:100%;object-fit:cover">` : esc(initials(organizerName))}</div>
+      <span style="font-weight:800;font-size:18px;color:var(--text)">${esc(organizerName)}</span>
     </div>`;
 
   // Total number of distinct people who voted (already deduped by name — see
@@ -4818,9 +4819,15 @@ function renderParticipantsTab(p, groups) {
   // from two devices under the same name, is only counted once.
   const totalVoters = allVotes.length;
   const totalRow = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border)">
-      <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${t("totalVoters")}</div>
-      <div style="font-size:16px;font-weight:700">${totalVoters}</div>
+    <div style="display:flex;align-items:center;gap:14px;background:var(--green-l);border:1px solid var(--green-m);border-radius:16px;padding:16px 18px;margin-bottom:30px">
+      <div style="width:40px;height:40px;border-radius:12px;background:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M17 11a4 4 0 1 0-3.2-6.4M17 11a4 4 0 0 1 4 4v2M17 11c1.5 0 4 .8 4 4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path><circle cx="9" cy="8" r="4" stroke="#fff" stroke-width="1.8"></circle><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--green)">${t("totalVoters").toUpperCase()}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:2px">${t("totalVotersSub")}</div>
+      </div>
+      <div style="font-size:30px;font-weight:800;color:var(--green)">${totalVoters}</div>
     </div>`;
 
   // "+N" options are guest-count modifiers, not real attendance choices.
@@ -4869,21 +4876,21 @@ function renderParticipantsTab(p, groups) {
     const tone = avatarToneFor(v);
     const nameLabel = extra > 0 ? `${esc(v.name)} +${extra}` : esc(v.name);
     return `
-          <div style="display:flex;flex-direction:column;align-items:center;width:64px;text-align:center">
-            <div style="position:relative;display:inline-block;width:44px;height:44px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:64px;text-align:center">
+            <div style="position:relative;width:56px;height:56px">
               ${
                 v.avatar
-                  ? `<img src="${v.avatar}" alt="" style="box-sizing:border-box;width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid ${tone.border}">`
-                  : `<div style="box-sizing:border-box;width:44px;height:44px;border-radius:50%;background:${tone.solid};color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">${esc(initials(v.name))}</div>`
+                  ? `<img src="${v.avatar}" alt="" style="box-sizing:border-box;width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--text)">`
+                  : `<div style="box-sizing:border-box;width:56px;height:56px;border-radius:50%;background:${tone.solid};color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;border:2px solid var(--text)">${esc(initials(v.name))}</div>`
               }
               ${
                 extra > 0
-                  ? `<div style="position:absolute;bottom:-3px;right:-6px;background:var(--blue);color:#fff;font-size:9px;font-weight:700;line-height:1;padding:2px 4px;border-radius:8px;border:2px solid var(--surface)">+${extra}</div>`
+                  ? `<div style="position:absolute;bottom:-2px;right:-4px;background:var(--green);color:#fff;font-size:11px;font-weight:800;border-radius:999px;padding:2px 6px;border:2px solid var(--surface)">+${extra}</div>`
                   : ""
               }
             </div>
-            <div style="font-size:11px;margin-top:4px;line-height:1.25;word-break:break-word">${nameLabel}</div>
-            ${absent ? `<span class="badge-pill badge-coral" style="margin-top:4px">${t("absent")}</span>` : ""}
+            <span style="font-size:13px;font-weight:600;color:var(--text);text-align:center">${nameLabel}</span>
+            ${absent ? `<span class="badge-pill badge-coral">${t("absent")}</span>` : ""}
           </div>`;
   };
 
@@ -4933,9 +4940,12 @@ function renderParticipantsTab(p, groups) {
         })
         .join("");
       return `
-    <div style="margin-bottom:18px">
-      <div style="font-size:13px;font-weight:600;color:${g.tone.text};margin-bottom:10px">${esc(g.label)} · ${total}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:14px">${cells}</div>
+    <div style="margin-bottom:30px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <span style="font-size:15px;font-weight:800;color:${g.tone.solid}">${esc(g.label)}</span>
+        <span style="background:${g.tone.solid};color:#fff;font-size:12px;font-weight:800;border-radius:999px;padding:2px 10px">${total}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:22px">${cells}</div>
     </div>`;
     })
     .join("");
@@ -4949,9 +4959,12 @@ function renderParticipantsTab(p, groups) {
       if (leftover.length === 0) return "";
       const cells = leftover.map((v) => renderAvatarCell(v, 0)).join("");
       return `
-    <div style="margin-bottom:18px">
-      <div style="font-size:13px;font-weight:600;color:${g.tone.text};margin-bottom:10px">${esc(g.label)} · ${leftover.length}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:14px">${cells}</div>
+    <div style="margin-bottom:30px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <span style="font-size:15px;font-weight:800;color:${g.tone.solid}">${esc(g.label)}</span>
+        <span style="background:${g.tone.solid};color:#fff;font-size:12px;font-weight:800;border-radius:999px;padding:2px 10px">${leftover.length}</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:22px">${cells}</div>
     </div>`;
     })
     .join("");
