@@ -357,10 +357,22 @@ async function saveMembers() {
   members.forEach((m) => (obj[m.id] = m));
   try {
     await fdb.ref(MEMBERS_ROOT).set(obj);
-    console.log("[name-picker] saveMembers(): pushed", members.length, "member(s) to", MEMBERS_ROOT);
+    console.log(
+      "[name-picker] saveMembers(): pushed",
+      members.length,
+      "member(s) to",
+      MEMBERS_ROOT,
+    );
   } catch (err) {
-    console.error("[name-picker] saveMembers(): FAILED to write to", MEMBERS_ROOT, "—", err);
-    showToast("Couldn't sync members to Firebase — check Firebase Rules (see console)");
+    console.error(
+      "[name-picker] saveMembers(): FAILED to write to",
+      MEMBERS_ROOT,
+      "—",
+      err,
+    );
+    showToast(
+      "Couldn't sync members to Firebase — check Firebase Rules (see console)",
+    );
   }
 }
 let _membersSyncStarted = false;
@@ -379,7 +391,12 @@ async function initMembersSync() {
     (snap) => {
       const val = snap.val() || {};
       publicMembers = Object.values(val);
-      console.log("[name-picker] initMembersSync(): loaded", publicMembers.length, "member(s) from", MEMBERS_ROOT);
+      console.log(
+        "[name-picker] initMembersSync(): loaded",
+        publicMembers.length,
+        "member(s) from",
+        MEMBERS_ROOT,
+      );
       let changed = false;
       publicMembers.forEach((rm) => {
         if (!members.find((m) => m.id === rm.id)) {
@@ -409,7 +426,12 @@ async function initMembersSync() {
       }
     },
     (err) => {
-      console.error("[name-picker] initMembersSync(): FAILED to read", MEMBERS_ROOT, "—", err);
+      console.error(
+        "[name-picker] initMembersSync(): FAILED to read",
+        MEMBERS_ROOT,
+        "—",
+        err,
+      );
     },
   );
 }
@@ -517,7 +539,9 @@ function approveMember(id) {
   if (!m.type) m.type = "casual";
   saveMembers();
   renderMembers();
-  showToast(`Approved "${m.name}" as ${m.type === "fixed" ? "Fixed" : "Casual"} member`);
+  showToast(
+    `Approved "${m.name}" as ${m.type === "fixed" ? "Fixed" : "Casual"} member`,
+  );
 }
 async function rejectMember(id) {
   const m = members.find((m) => m.id === id);
@@ -782,7 +806,7 @@ function buildSessionText(s) {
   // Members with no-show annotations get their own line (not grouped with
   // clean members) so the annotation stays clear.
   const amtOrder = []; // ordered unique amounts (first-seen)
-  const byAmt = {};    // amt -> { clean: [], annotated: [] }
+  const byAmt = {}; // amt -> { clean: [], annotated: [] }
   entries.forEach((e) => {
     if (!byAmt[e.amt]) {
       byAmt[e.amt] = { clean: [], annotated: [] };
@@ -965,8 +989,12 @@ const COST_PRESETS = [
 // (matches the redesigned modal) — expanded automatically when editing a
 // session that already has one saved.
 function setMapsLinkFieldVisible(visible) {
-  document.getElementById("ms-maps-toggle").style.display = visible ? "none" : "flex";
-  document.getElementById("ms-maps-group").style.display = visible ? "block" : "none";
+  document.getElementById("ms-maps-toggle").style.display = visible
+    ? "none"
+    : "flex";
+  document.getElementById("ms-maps-group").style.display = visible
+    ? "block"
+    : "none";
 }
 function showMapsLinkField() {
   setMapsLinkFieldVisible(true);
@@ -985,7 +1013,12 @@ function openNewSession() {
   document.getElementById("ms-maps-link").value = "";
   setMapsLinkFieldVisible(false);
   // All members included; fixed always pre-checked in costs
-  tempMembers = members.map((m) => ({ ...m, included: true, guestCount: 0, noShowCount: 0 }));
+  tempMembers = members.map((m) => ({
+    ...m,
+    included: true,
+    guestCount: 0,
+    noShowCount: 0,
+  }));
   tempCosts = COST_PRESETS.map((p) => ({
     id: uid(),
     name: p.name,
@@ -1243,7 +1276,12 @@ function addInlineMember() {
   const newMember = { id: uid(), name, type: "casual" };
   members.push(newMember);
   saveMembers();
-  tempMembers.push({ ...newMember, included: true, guestCount: 0, noShowCount: 0 });
+  tempMembers.push({
+    ...newMember,
+    included: true,
+    guestCount: 0,
+    noShowCount: 0,
+  });
   inp.value = "";
   // Casual: NOT auto-added to cost lines (must be ticked manually)
   renderModalMembers();
@@ -2008,9 +2046,10 @@ function showToast(msg) {
   _tt = setTimeout(() => el.classList.remove("show"), 2400);
 }
 function showAbsentTip(name, extra) {
-  const msg = voterLang === "vi"
-    ? `${name} vắng mặt nhưng vote dùm cho ${extra} bạn khác`
-    : `${name} is absent but voted on behalf of ${extra} other friend${extra > 1 ? "s" : ""}`;
+  const msg =
+    voterLang === "vi"
+      ? `${name} vắng mặt nhưng vote dùm cho ${extra} bạn khác`
+      : `${name} is absent but voted on behalf of ${extra} other friend${extra > 1 ? "s" : ""}`;
   showToast(msg);
 }
 
@@ -2788,7 +2827,8 @@ function cancelEditPoll() {
   tempPollOptions = DEFAULT_POLL_OPTIONS.map((o) => ({ ...o }));
   renderPollOptionsEditor();
   document.getElementById("vote-create-title").textContent = "Create Vote";
-  document.getElementById("vote-create-btn").innerHTML = `${ICON_PLUS}<span>Create Vote</span>`;
+  document.getElementById("vote-create-btn").innerHTML =
+    `${ICON_PLUS}<span>Create Vote</span>`;
   document.getElementById("vote-create-cancel").style.display = "none";
 }
 
@@ -3173,7 +3213,8 @@ function createSessionFromPoll(pid) {
       members.push(m);
     }
     votedIds.add(m.id);
-    guestCounts[m.id] = (guestCounts[m.id] || 0) + Math.max(0, (v.weight || 1) - 1);
+    guestCounts[m.id] =
+      (guestCounts[m.id] || 0) + Math.max(0, (v.weight || 1) - 1);
   });
   saveMembers();
   editingSessionId = null;
@@ -3792,7 +3833,10 @@ function noShowChipHtml(pid, a) {
     ? `<img src="${a.avatar}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
     : esc(initials(a.name));
   const nsCount = tempNoShows[a.nameKey] || 0;
-  const countLabel = nsCount > 0 ? ` <span style="font-size:10px;color:var(--hint)">(${nsCount} no-show)</span>` : "";
+  const countLabel =
+    nsCount > 0
+      ? ` <span style="font-size:10px;color:var(--hint)">(${nsCount} no-show)</span>`
+      : "";
   return `<span class="ns-chip">
     <span class="ns-chip-avatar" style="background:${a.avatar ? "transparent" : tone.solid};overflow:hidden">${avatarHtml}</span>
     <span class="ns-chip-name">${esc(a.name)}${countLabel}</span>
@@ -5256,19 +5300,18 @@ function renderPaymentTab(p) {
     </div>`;
   }
   const costLines = (sc.costs || [])
-    .map(
-      (c) => {
-        // c.names can be [{text, absent}] (self-serve) or ["string"] (session-linked)
-        const namesParts = (c.names || []).map((n) => {
-          if (typeof n === "object" && n.text) {
-            if (n.absent && n.extra > 0) {
-              return `<span style="color:var(--coral);cursor:pointer" onclick="event.stopPropagation();showAbsentTip('${esc(n.name).replace(/'/g, "\\'")}',${n.extra})">${esc(n.text)}</span>`;
-            }
-            return esc(n.text);
+    .map((c) => {
+      // c.names can be [{text, absent}] (self-serve) or ["string"] (session-linked)
+      const namesParts = (c.names || []).map((n) => {
+        if (typeof n === "object" && n.text) {
+          if (n.absent && n.extra > 0) {
+            return `<span style="color:var(--coral);cursor:pointer" onclick="event.stopPropagation();showAbsentTip('${esc(n.name).replace(/'/g, "\\'")}',${n.extra})">${esc(n.text)}</span>`;
           }
-          return esc(n);
-        });
-        return `
+          return esc(n.text);
+        }
+        return esc(n);
+      });
+      return `
     <div class="cost-card">
       <div class="cost-card-top">
         <div class="cost-card-left">
@@ -5279,8 +5322,7 @@ function renderPaymentTab(p) {
       </div>
       <div class="cost-card-detail"><span class="cost-card-names">${namesParts.length ? namesParts.join(", ") : t("unassigned")}</span><span class="cost-card-per-person">${fmt(c.perPerson)}${t("perPerson")}</span></div>
     </div>`;
-      },
-    )
+    })
     .join("");
   const memberLines = (sc.members || [])
     .map((m) => {
@@ -5298,9 +5340,10 @@ function renderPaymentTab(p) {
       // only voted a "+N" guest option (voting on behalf of their friends).
       const isAbsent = !!m.absent;
       const nameStyle = isAbsent ? "color:var(--coral);cursor:pointer" : "";
-      const absentClick = isAbsent && m.extra > 0
-        ? `onclick="event.stopPropagation();showAbsentTip('${esc(m.name).replace(/'/g, "\\'")}',${m.extra})"`
-        : "";
+      const absentClick =
+        isAbsent && m.extra > 0
+          ? `onclick="event.stopPropagation();showAbsentTip('${esc(m.name).replace(/'/g, "\\'")}',${m.extra})"`
+          : "";
       const badgeClick = sc.selfServe
         ? `onclick="event.stopPropagation();toggleSelfServePaid('${voterPid}','${m.nameKey}')" style="cursor:pointer"`
         : "";
@@ -5434,7 +5477,9 @@ function ensureMembersLoaded() {
 // accent/case-insensitive via the existing nameKey() helper.
 function findMemberByTypedName(name) {
   const key = nameKey(name);
-  return publicMembers.find((m) => !m.pending && nameKey(m.name) === key) || null;
+  return (
+    publicMembers.find((m) => !m.pending && nameKey(m.name) === key) || null
+  );
 }
 let namePickerCallback = null; // called with (pickedName|null) when the picker resolves
 // Resolves the name to use for a voting action (toggleVote/confirmVote/
@@ -5572,13 +5617,14 @@ function renderNamePickerList(query) {
   const filtered = q
     ? pool.filter((m) => m.name.toLowerCase().includes(q))
     : pool;
-  const fixed = filtered.filter((m) => m.type === "fixed" || m.type === undefined);
+  const fixed = filtered.filter(
+    (m) => m.type === "fixed" || m.type === undefined,
+  );
   const casual = filtered.filter((m) => m.type === "casual");
   let html = "";
   if (fixed.length) html += fixed.map(npRowHtml).join("");
   if (casual.length) html += casual.map(npRowHtml).join("");
-  if (!filtered.length)
-    html += `<div class="ns-empty">No members found.</div>`;
+  if (!filtered.length) html += `<div class="ns-empty">No members found.</div>`;
   const trimmedQuery = (query || "").trim();
   html += `<div class="np-add-row" onclick="requestAddNewMember()">
     <span class="np-add-circle">+</span>
@@ -5587,7 +5633,9 @@ function renderNamePickerList(query) {
   list.innerHTML = html;
 }
 function pickName(id) {
-  const m = publicMembers.find((mm) => mm.id === id) || members.find((mm) => mm.id === id);
+  const m =
+    publicMembers.find((mm) => mm.id === id) ||
+    members.find((mm) => mm.id === id);
   if (!m) return;
   closeModal("modal-name-picker");
   const cb = namePickerCallback;
@@ -5830,7 +5878,6 @@ function renderVoterNameHint() {
   // Don't re-render everything (avoid losing focus while typing) — light update only if needed later
 }
 
-
 // Tapping an option only changes the LOCAL pending selection — nothing is
 // written to Firebase until the member taps "Confirm selection". This avoids
 // a network write (and a throttle "attempt") per tap, and lets people freely
@@ -5913,7 +5960,10 @@ async function toggleVote(optionId) {
 // Locks in the pending selection — this is the actual "vote attempt" that
 // counts toward the 4-free / growing-delay throttle.
 async function confirmVote() {
-  console.log("[name-picker] confirmVote() called, poll status:", voterPoll && voterPoll.status);
+  console.log(
+    "[name-picker] confirmVote() called, poll status:",
+    voterPoll && voterPoll.status,
+  );
   if (!voterPoll || voterPoll.status !== "open") {
     showToast("This vote is closed");
     return;
