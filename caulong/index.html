@@ -16,7 +16,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="src/assets/styles.css">
 </head>
 <body>
 
@@ -359,5 +359,66 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="script.js"></script>
+<!-- ══════════════════════════════════════════════════════════════════
+     SCRIPTS — nạp theo thứ tự phụ thuộc (Separation of Concerns)
+     Tầng dưới (constants/services/utils) nạp trước, tầng trên
+     (views/features) nạp sau, main.js (khởi tạo) nạp cuối cùng.
+     ══════════════════════════════════════════════════════════════════ -->
+
+<!-- 1. Constants: cấu hình cố định -->
+<script src="src/constants/config.js"></script>
+<script src="src/constants/avatars.js"></script>
+
+<!-- 2. Services: storage, firebase, device, backup -->
+<script src="src/services/storage.js"></script>
+<script src="src/services/firebase.js"></script>
+<script src="src/services/device.js"></script>
+
+<!-- 3. Utils: hàm bổ trợ thuần túy -->
+<script src="src/utils/name.js"></script>
+<script src="src/utils/helpers.js"></script>
+
+<!-- 4. Context: trạng thái toàn cục -->
+<script src="src/context/state.js"></script>
+
+<!-- 5. Components: UI tái sử dụng (modal, toast, confirm) -->
+<script src="src/components/modal.js"></script>
+<script src="src/components/toast.js"></script>
+<script src="src/components/confirmDialog.js"></script>
+
+<!-- 6. Layout: điều hướng tab -->
+<script src="src/layout/tabs.js"></script>
+
+<!-- 7. Views/Features -->
+<!-- Members -->
+<script src="src/views/Members/members.js"></script>
+<!-- Sessions -->
+<script src="src/views/Sessions/costCalc.js"></script>
+<script src="src/views/Sessions/sessionPollSync.js"></script>
+<script src="src/views/Sessions/sessionText.js"></script>
+<script src="src/views/Sessions/sessionList.js"></script>
+<script src="src/views/Sessions/sessionModal.js"></script>
+<script src="src/views/Sessions/sessionDetail.js"></script>
+<!-- Vote -->
+<script src="src/views/Vote/i18n.js"></script>
+<script src="src/views/Vote/admin/voteAdminTab.js"></script>
+<script src="src/views/Vote/admin/pollEditor.js"></script>
+<script src="src/views/Vote/admin/adminActions.js"></script>
+<script src="src/views/Vote/voter/voterPage.js"></script>
+<script src="src/views/Vote/hosting/selfServe.js"></script>
+<script src="src/views/Vote/activityLog.js"></script>
+<script src="src/views/Vote/admin/adminRateLimit.js"></script>
+<script src="src/views/Vote/voter/detailTab.js"></script>
+<script src="src/views/Vote/voter/participantsTab.js"></script>
+<script src="src/views/Vote/voter/paymentTab.js"></script>
+<script src="src/views/Vote/voter/voterIdentity.js"></script>
+<script src="src/views/Vote/voter/voterAvatar.js"></script>
+<!-- Export -->
+<script src="src/services/backup.js"></script>
+<script src="src/views/Export/exportPage.js"></script>
+<script src="src/views/Export/exportImage.js"></script>
+
+<!-- 8. Bảo vệ + Khởi tạo (LUÔN cuối cùng) -->
+<script src="src/utils/protection.js"></script>
+<script src="src/main.js"></script>
 </body></html>

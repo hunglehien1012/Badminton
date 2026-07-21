@@ -1,0 +1,56 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "polls": {
+      ".read": "auth != null",
+      "$pollId": {
+        ".write": "auth != null && (auth.uid == 'aaMWO80NMGca1qWp73t0WDnOgMy1' || (!data.exists() && newData.exists() && newData.child('creatorUid').val() == auth.uid) || (data.exists() && newData.exists() && data.child('creatorUid').val() == auth.uid))",
+        "options": {
+          "$optId": {
+            ".write": "auth != null && (!data.exists() || auth.uid == 'aaMWO80NMGca1qWp73t0WDnOgMy1' || root.child('polls').child($pollId).child('creatorUid').val() == auth.uid)"
+          }
+        },
+        "votes": {
+          "$voterId": {
+            ".write": "auth != null"
+          }
+        },
+        "logs": {
+          "$logId": {
+            ".write": "auth != null && !data.exists()"
+          }
+        }
+      }
+    },
+    "test_polls": {
+      ".read": "auth != null",
+      "$pollId": {
+        ".write": "auth != null",
+        "options": { "$optId": { ".write": "auth != null" } },
+        "votes": { "$voterId": { ".write": "auth != null" } },
+        "logs": { "$logId": { ".write": "auth != null" } }
+      }
+    },
+    "members": {
+      ".read": "auth != null",
+      ".write": "auth != null && auth.uid == 'aaMWO80NMGca1qWp73t0WDnOgMy1'",
+      "$memberId": {
+        ".write": "auth != null && (auth.uid == 'aaMWO80NMGca1qWp73t0WDnOgMy1' || (!data.exists() && newData.exists() && newData.child('pending').val() == true))"
+      }
+    },
+    "test_members": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$memberId": {
+        ".write": "auth != null"
+      }
+    },
+    "adminLockouts": {
+      "$key": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}

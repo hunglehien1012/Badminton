@@ -1,0 +1,16 @@
+# Dependencies (nếu sau này dùng bundler)
+node_modules/
+
+# Môi trường — KHÔNG commit file chứa key thật
+.env
+.env.local
+
+# Hệ điều hành / editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Backup dữ liệu xuất ra từ app
+*.backup.json
