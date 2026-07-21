@@ -3567,6 +3567,10 @@ async function initHostManageView(pid) {
   }
   await ensureFirebaseAuth();
   const myUid = await getMyAuthUid();
+  // Guards the one-time "claim" write below (see isOrganizerMatch branch) so
+  // we don't retry it on every single snapshot re-fire (e.g. someone else
+  // voting), only once per page load unless it actually failed.
+  let claimAttempted = false;
   fdb.ref(POLLS_ROOT + "/" + pid).on(
     "value",
     (snap) => {
@@ -3578,16 +3582,47 @@ async function initHostManageView(pid) {
       }
       pollsCache[pid] = p; // so togglePollStatus/deletePoll/clearPollLog/etc. (read pollsCache) work unmodified
       const isCreator = !!myUid && p.creatorUid === myUid;
+      const isClaimedEditor =
+        !!myUid && !!(p.editorUids && p.editorUids[myUid]);
       const lockedName = (ls("hl_voter_locked_name") || "").trim();
       const isOrganizerMatch =
         !!(p.organizer || "").trim() &&
         !!lockedName &&
         nameKey(lockedName) === nameKey(p.organizer);
-      if (!isCreator && !isOrganizerMatch) {
-        renderHostManageNameGate(pid, p);
+      if (isCreator || isClaimedEditor) {
+        renderHostManageForm(pid, p);
         return;
       }
-      renderHostManageForm(pid, p);
+      if (isOrganizerMatch) {
+        // Name matches, but THIS device/browser has never been granted write
+        // access before (new device, cleared cache, incognito…). The client
+        // already trusts the name match to *show* the form, but Firebase
+        // Rules only trust creatorUid/editorUids — never a client-typed
+        // name — so without this, Update/Close/Delete would still get
+        // rejected with PERMISSION_DENIED. Claim it once so this device is
+        // now a real, rules-recognized editor of this poll going forward.
+        if (myUid && !isClaimedEditor && !claimAttempted) {
+          claimAttempted = true;
+          fdb
+            .ref(POLLS_ROOT + "/" + pid + "/editorUids/" + myUid)
+            .set(true)
+            .catch((err) => {
+              console.error("Couldn't claim editor access", err);
+              claimAttempted = false; // allow retry on the next snapshot
+              body.innerHTML =
+                '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px;line-height:1.6">⚠️ Your name matches this vote\'s organizer, but this device couldn\'t get edit access (Firebase Rules rejected it). Ask whoever set up Firebase to add the <code>editorUids</code> rule.</div>';
+            });
+          // "value" will re-fire once the write above lands, with
+          // editorUids now containing myUid → isClaimedEditor becomes true
+          // above and the real form renders. Show a brief holding state.
+          body.innerHTML =
+            '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px">Unlocking manage access…</div>';
+          return;
+        }
+        renderHostManageForm(pid, p);
+        return;
+      }
+      renderHostManageNameGate(pid, p);
     },
     (err) => {
       console.error(err);
@@ -3616,7 +3651,7 @@ function renderHostManageNameGate(pid, p) {
     <button class="vv-vote-btn" onclick="unlockHostManage('${pid}')">Unlock</button>
   `;
 }
-function unlockHostManage(pid) {
+async function unlockHostManage(pid) {
   const nameInput = document.getElementById("hmg-name");
   const name = (nameInput.value || "").trim();
   if (!name) {
@@ -3629,6 +3664,20 @@ function unlockHostManage(pid) {
     return;
   }
   ss("hl_voter_locked_name", name);
+  // Also claim real (Rules-recognized) edit access for this device — typing
+  // the matching name only unlocks the UI locally; without this write,
+  // Update/Close/Delete would still fail with PERMISSION_DENIED afterwards.
+  const myUid = await getMyAuthUid();
+  if (myUid) {
+    try {
+      await fdb.ref(POLLS_ROOT + "/" + pid + "/editorUids/" + myUid).set(true);
+    } catch (err) {
+      console.error("Couldn't claim editor access", err);
+      showToast(
+        "Unlocked, but this device couldn't get save access (check Firebase Rules) — Update may still fail.",
+      );
+    }
+  }
   renderHostManageForm(pid, p);
 }
 // Self-serve cost lines for a hosted vote — same shape/idea as the admin
