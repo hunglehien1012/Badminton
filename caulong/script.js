@@ -3603,18 +3603,40 @@ async function initHostManageView(pid) {
         // now a real, rules-recognized editor of this poll going forward.
         if (myUid && !isClaimedEditor && !claimAttempted) {
           claimAttempted = true;
+          // On a brand-new device/anonymous session, the very first write can
+          // take a long time (WebSocket handshake + auth token still
+          // settling) — sometimes long enough to look "stuck". Rather than
+          // block on it forever, show the form optimistically after a short
+          // timeout; the claim write keeps running in the background and
+          // will still land (or the next Update attempt will retry/report
+          // the real error if it genuinely failed).
+          let claimSettled = false;
+          const proceedOptimistically = () => {
+            if (claimSettled) return;
+            claimSettled = true;
+            renderHostManageForm(pid, p);
+          };
+          const claimTimeout = setTimeout(proceedOptimistically, 4000);
           fdb
             .ref(POLLS_ROOT + "/" + pid + "/editorUids/" + myUid)
             .set(true)
+            .then(() => {
+              clearTimeout(claimTimeout);
+              proceedOptimistically();
+            })
             .catch((err) => {
+              clearTimeout(claimTimeout);
               console.error("Couldn't claim editor access", err);
               claimAttempted = false; // allow retry on the next snapshot
-              body.innerHTML =
-                '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px;line-height:1.6">⚠️ Your name matches this vote\'s organizer, but this device couldn\'t get edit access (Firebase Rules rejected it). Ask whoever set up Firebase to add the <code>editorUids</code> rule.</div>';
+              if (!claimSettled) {
+                claimSettled = true;
+                body.innerHTML =
+                  '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px;line-height:1.6">⚠️ Your name matches this vote\'s organizer, but this device couldn\'t get edit access (Firebase Rules rejected it). Ask whoever set up Firebase to add the <code>editorUids</code> rule.</div>';
+              }
             });
-          // "value" will re-fire once the write above lands, with
-          // editorUids now containing myUid → isClaimedEditor becomes true
-          // above and the real form renders. Show a brief holding state.
+          // "value" will also re-fire once the write above actually lands,
+          // with editorUids now containing myUid → isClaimedEditor becomes
+          // true above and the real form renders normally from then on.
           body.innerHTML =
             '<div style="text-align:center;font-size:13px;color:var(--muted);padding:16px 10px">Unlocking manage access…</div>';
           return;
@@ -3670,7 +3692,14 @@ async function unlockHostManage(pid) {
   const myUid = await getMyAuthUid();
   if (myUid) {
     try {
-      await fdb.ref(POLLS_ROOT + "/" + pid + "/editorUids/" + myUid).set(true);
+      // Don't block the Unlock button forever if this is a brand-new
+      // device/session and the first write is slow to land — let it keep
+      // running in the background past the timeout; Update will retry/report
+      // the real error later if it truly never went through.
+      await Promise.race([
+        fdb.ref(POLLS_ROOT + "/" + pid + "/editorUids/" + myUid).set(true),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ]);
     } catch (err) {
       console.error("Couldn't claim editor access", err);
       showToast(
